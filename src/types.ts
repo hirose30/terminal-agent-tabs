@@ -1,0 +1,99 @@
+import type { ChildProcess } from 'child_process';
+import type { Writable } from 'stream';
+import type { WriteStream } from 'fs';
+import type { Terminal } from '@xterm/xterm';
+import type { FitAddon } from '@xterm/addon-fit';
+
+export type SessionStatus = 'running' | 'exited' | 'error';
+
+export type StartMode = 'new' | 'continue';
+
+export interface CliProfile {
+	id: string;
+	displayName: string;
+	executablePath: string;
+	defaultArgs: string[];
+	supportsResume: boolean;
+	resumeArgs: string[];
+}
+
+export interface TabLaunchConfig {
+	cliId: string;
+	additionalArgs: string[];
+}
+
+export interface Session {
+	sessionId: string;
+	process: ChildProcess | null;
+	winsizePipe: Writable | null;
+	terminal: Terminal | null;
+	fitAddon: FitAddon | null;
+	fontSize: number;
+	headerText: string;
+	status: SessionStatus;
+	exitCode: number | null;
+	createdAt: Date;
+	cliId: string;
+	supportsResume: boolean;
+	tabLaunchConfig?: TabLaunchConfig;
+	lastOutputLine?: string;
+	debugLogPath?: string;
+	debugStream?: WriteStream | null;
+}
+
+export interface ClaudeCodeTabsSettings {
+	defaultFontSize: number;
+	terminalFontFamily: string;
+	terminalCustomGlyphs: boolean;
+	enableOsc52ClipboardSync: boolean;
+	enableHookNotifications: boolean;
+	enableHookNotificationSound: boolean;
+	hookEventsFilePath: string;
+	hookEventsPollIntervalMs: number;
+	wrapSelectionInCodeBlock: boolean;
+	includeNotePathInSelectionSend: boolean;
+	enableDebugLogging: boolean;
+	defaultCliId: string;
+	terminalThemeName: string;
+	cliProfiles: CliProfile[];
+}
+
+export type NotificationType = 'action_needed' | 'needs_input' | 'task_complete' | 'agent_event';
+
+export interface AgentNotification {
+	id: string;
+	sessionId: string;
+	type: NotificationType;
+	title: string;
+	body: string;
+	source: string;
+	timestamp: Date;
+}
+
+export const DEFAULT_TERMINAL_FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
+
+export const DEFAULT_SETTINGS: ClaudeCodeTabsSettings = {
+	defaultFontSize: 14,
+	terminalFontFamily: DEFAULT_TERMINAL_FONT_FAMILY,
+	terminalCustomGlyphs: true,
+	enableOsc52ClipboardSync: true,
+	enableHookNotifications: false,
+	enableHookNotificationSound: false,
+	hookEventsFilePath: '',
+	hookEventsPollIntervalMs: 1500,
+	wrapSelectionInCodeBlock: false,
+	includeNotePathInSelectionSend: false,
+	enableDebugLogging: false,
+	defaultCliId: 'claude',
+	terminalThemeName: '',
+	cliProfiles: [
+		{
+			id: 'claude',
+			displayName: 'Claude',
+			executablePath: 'claude',
+			defaultArgs: [],
+			supportsResume: true,
+			resumeArgs: ['--resume']
+		}
+	]
+};

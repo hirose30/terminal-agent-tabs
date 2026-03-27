@@ -1,0 +1,408 @@
+/* Claude Code Tabs Plugin Styles */
+
+/* Remove Obsidian theme/content paddings so terminal can use full tab area. */
+.workspace-leaf-content[data-type="claude-session-view"] .view-content,
+.view-content.claude-session-container {
+	padding: 0 !important;
+	margin: 0 !important;
+}
+
+/*
+ * Hide tab header bar + navigation when a tab group contains ONLY v2 session tabs.
+ * This reclaims vertical space in split layouts.
+ * The :has() selector targets tab groups where every tab is a v2 session.
+ */
+.workspace-tab-header-container:has(.workspace-tab-header-inner-icon > .svg-icon) {
+	/* Fallback: cannot reliably detect v2-only groups with pure CSS.
+	   Instead, hide the tab bar and nav for any leaf that holds our view. */
+}
+.workspace-leaf-content[data-type="claude-session-view"] .view-header {
+	display: none !important;
+}
+.workspace-leaf-content[data-type="claude-session-view"] {
+	/* Reclaim the header space so terminal gets full height */
+	--header-height: 0px;
+}
+
+.claude-session-container {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	width: 100%;
+	overflow: hidden;
+	box-sizing: border-box;
+}
+
+.claude-terminal {
+	flex: 1;
+	overflow: hidden;
+	background-color: var(--background-primary, #1e1e1e);
+	/* Prevent content from overflowing into status bar */
+	min-height: 0;
+	padding: 0;
+	margin: 0;
+	box-sizing: border-box;
+}
+
+/* xterm.js container - no padding to avoid character grid misalignment */
+.claude-terminal .xterm {
+	height: 100%;
+	padding: 0;
+	line-height: 1 !important;
+	/* Guard against theme-level typography rules that break block art alignment */
+	letter-spacing: 0 !important;
+	font-variant-ligatures: none !important;
+	font-feature-settings: "liga" 0, "calt" 0 !important;
+}
+
+.claude-terminal .xterm-screen canvas {
+	letter-spacing: 0 !important;
+}
+
+/* Viewport scrolling */
+.claude-terminal .xterm-viewport {
+	overflow-y: auto !important;
+	margin: 0 !important;
+	padding: 0 !important;
+}
+
+/* Ensure proper font rendering in canvas */
+.claude-terminal .xterm-text-layer,
+.claude-terminal .xterm-cursor-layer,
+.claude-terminal .xterm-selection-layer {
+	font-feature-settings: "liga" 0;
+	text-rendering: auto;
+	-webkit-font-smoothing: auto;
+}
+
+.claude-session-status {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	padding: 20px;
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.claude-session-status.error {
+	color: var(--text-error);
+}
+
+.claude-session-status-message {
+	margin-bottom: 20px;
+	font-size: 14px;
+}
+
+.claude-session-button-container {
+	display: flex;
+	gap: 12px;
+	flex-wrap: wrap;
+	justify-content: center;
+}
+
+.claude-session-btn {
+	padding: 8px 16px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 13px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	color: var(--text-normal);
+}
+
+.claude-session-btn:hover {
+	background: var(--background-modifier-hover);
+}
+
+.claude-session-btn-primary {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+
+.claude-session-btn-primary:hover {
+	background: var(--interactive-accent-hover);
+}
+
+/* === Session Sidebar === */
+
+.claude-sidebar-container {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow-y: auto;
+	font-size: 13px;
+}
+
+.claude-sidebar-section-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 12px 4px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.claude-sidebar-section-title {
+	font-weight: 600;
+	font-size: 12px;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	letter-spacing: 0.05em;
+}
+
+.claude-sidebar-icon-btn {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--text-muted);
+	padding: 2px;
+	border-radius: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.claude-sidebar-icon-btn:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.claude-sidebar-icon-btn svg {
+	width: 14px;
+	height: 14px;
+}
+
+.claude-sidebar-empty {
+	padding: 12px;
+	color: var(--text-faint);
+	font-size: 12px;
+	text-align: center;
+}
+
+/* Session List (Card style) */
+
+.claude-sidebar-session-list {
+	padding: 4px 0;
+}
+
+.claude-sidebar-card {
+	padding: 10px 12px;
+	cursor: pointer;
+	border-radius: 6px;
+	margin: 2px 4px;
+	transition: background 0.1s ease;
+}
+
+.claude-sidebar-card:hover {
+	background: var(--background-modifier-hover);
+}
+
+.claude-sidebar-card.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.claude-sidebar-card.is-active .claude-sidebar-card-subtitle,
+.claude-sidebar-card.is-active .claude-sidebar-card-context {
+	color: var(--text-on-accent);
+	opacity: 0.8;
+}
+
+.claude-sidebar-card.is-active .claude-sidebar-card-status-dot.status-running {
+	background-color: #fff;
+}
+
+/* Card title row */
+.claude-sidebar-card-title-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 4px;
+}
+
+.claude-sidebar-card-status-dot {
+	flex-shrink: 0;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	margin-top: 1px;
+}
+
+.claude-sidebar-card-status-dot.status-running {
+	background-color: var(--color-green, #4caf50);
+}
+
+.claude-sidebar-card-status-dot.status-exited {
+	background-color: var(--text-faint);
+}
+
+.claude-sidebar-card-status-dot.status-error {
+	background-color: var(--text-error);
+}
+
+.claude-sidebar-card-title {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-normal);
+	flex: 1;
+	min-width: 0;
+	word-break: break-word;
+}
+
+.claude-sidebar-card.is-active .claude-sidebar-card-title {
+	color: var(--text-on-accent);
+}
+
+/* Card subtitle (latest message) */
+.claude-sidebar-card-subtitle {
+	font-size: 12px;
+	color: var(--text-muted);
+	line-height: 1.4;
+	margin-bottom: 4px;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+/* Card status label (Needs input, Complete) */
+.claude-sidebar-card-status-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 11px;
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+
+.claude-sidebar-card-status-label svg {
+	width: 13px;
+	height: 13px;
+}
+
+.claude-sidebar-card-status-label.type-action {
+	color: var(--color-orange, #e8a838);
+}
+
+.claude-sidebar-card-status-label.type-complete {
+	color: var(--color-green, #4caf50);
+}
+
+.claude-sidebar-card.is-active .claude-sidebar-card-status-label {
+	color: var(--text-on-accent);
+}
+
+/* Card context line (CLI profile, time) */
+.claude-sidebar-card-context {
+	font-size: 11px;
+	color: var(--text-faint);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Badge */
+
+.claude-sidebar-badge {
+	flex-shrink: 0;
+	background: var(--color-red, #e53935);
+	color: #fff;
+	font-size: 10px;
+	font-weight: 600;
+	padding: 0 5px;
+	border-radius: 8px;
+	min-width: 16px;
+	height: 16px;
+	line-height: 16px;
+	text-align: center;
+}
+
+/* Tab Badge (Phase 2) */
+
+.claude-tab-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--color-red, #e53935);
+	color: #fff;
+	font-size: 9px;
+	font-weight: 700;
+	padding: 0 4px;
+	border-radius: 7px;
+	min-width: 14px;
+	height: 14px;
+	line-height: 14px;
+	margin-left: 4px;
+	vertical-align: middle;
+}
+
+/* Notification List */
+
+.claude-sidebar-notification-list {
+	padding: 4px 0;
+}
+
+.claude-sidebar-notification-item {
+	padding: 8px 12px;
+	cursor: pointer;
+	border-left: 3px solid transparent;
+	margin: 1px 0;
+}
+
+.claude-sidebar-notification-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.claude-sidebar-notification-item.is-unread {
+	border-left-color: var(--interactive-accent);
+	background: var(--background-secondary-alt, var(--background-secondary));
+}
+
+.claude-sidebar-notification-type-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 2px;
+}
+
+.claude-sidebar-notification-type {
+	font-size: 11px;
+	font-weight: 600;
+	padding: 1px 6px;
+	border-radius: 3px;
+}
+
+.claude-sidebar-notification-type.type-action {
+	background: var(--color-red, #e53935);
+	color: var(--text-on-accent, #fff);
+}
+
+.claude-sidebar-notification-type.type-complete {
+	background: var(--color-green, #4caf50);
+	color: var(--text-on-accent, #fff);
+}
+
+.claude-sidebar-notification-type.type-event {
+	background: var(--color-blue, #2196f3);
+	color: var(--text-on-accent, #fff);
+}
+
+.claude-sidebar-notification-time {
+	font-size: 10px;
+	color: var(--text-faint);
+}
+
+.claude-sidebar-notification-body {
+	font-size: 12px;
+	color: var(--text-normal);
+	margin-top: 2px;
+	word-break: break-word;
+}
+
+.claude-sidebar-notification-source {
+	font-size: 10px;
+	color: var(--text-faint);
+	margin-top: 2px;
+}

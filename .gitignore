@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Build output
+main.js
+*.js.map
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Native module rebuild
+build/
+prebuilds/
+
+# Test coverage
+coverage/
+
+# Obsidian dev
+data.json
+
+
+# spec kit
+.specify/
+.claude/
+specs/
+
+# Build artifacts
+*.zip
+
+# Local docs
+docs/
+doc/
+AGENTS.md
