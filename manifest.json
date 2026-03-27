@@ -3,7 +3,7 @@
 	"name": "Terminal Agent Tabs",
 	"version": "1.0.0",
 	"minAppVersion": "1.0.0",
-	"description": "Run multiple agent CLI sessions as Obsidian tabs",
+	"description": "Run multiple agent CLI sessions (Claude Code, Codex, Gemini, etc.) as editor tabs.",
 	"author": "hirose30",
 	"authorUrl": "https://github.com/hirose30",
 	"isDesktopOnly": true
