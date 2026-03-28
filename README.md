@@ -26,11 +26,19 @@ An Obsidian plugin that lets you run multiple agent CLI sessions (Claude Code, C
 
 ## Installation
 
-### Manual Installation
+### From GitHub Release (recommended)
 
-1. Clone or download this repository
+1. Go to the [latest release](https://github.com/hirose30/terminal-agent-tabs/releases/latest)
+2. Download `main.js`, `manifest.json`, `styles.css`
+3. Create a folder at `<vault>/.obsidian/plugins/terminal-agent-tabs/`
+4. Copy the downloaded files and the `resources/` folder into it
+5. Restart Obsidian and enable the plugin in Settings > Community Plugins
+
+### From Source
+
+1. Clone this repository
 2. Run `npm install && npm run build`
-3. Copy `main.js`, `manifest.json`, `styles.css`, and the `resources/` folder to your vault's plugin directory:
+3. Copy `main.js`, `manifest.json`, `styles.css`, and the `resources/` folder to:
    ```
    <vault>/.obsidian/plugins/terminal-agent-tabs/
    ```
@@ -40,14 +48,14 @@ An Obsidian plugin that lets you run multiple agent CLI sessions (Claude Code, C
 
 | Command | Description |
 |---------|-------------|
-| New Session Tab | Open a new session with the default CLI |
-| New Session Tab (Choose Target) | Open a new session after selecting a CLI profile |
-| Send Selection to Current Session | Send selected text to the active session |
-| Toggle Session Sidebar | Show/hide the session sidebar |
-| Focus Active Session | Jump to the last active session tab |
-| Focus Next / Previous Session | Cycle through session tabs |
-| Split Session (Horizontal / Vertical) | Split the current session view |
-| Increase / Decrease / Reset Font Size | Adjust font size in the current tab |
+| New session tab | Open a new session with the default CLI |
+| New session tab (choose target) | Open a new session after selecting a CLI profile |
+| Send selection to current session | Send selected text to the active session |
+| Toggle session sidebar | Show/hide the session sidebar |
+| Focus active session | Jump to the last active session tab |
+| Focus next / previous session | Cycle through session tabs |
+| Split session (horizontal / vertical) | Split the current session view |
+| Increase / decrease / reset font size | Adjust font size in the current tab |
 
 ## Settings
 
