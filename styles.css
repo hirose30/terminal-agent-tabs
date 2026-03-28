@@ -1,5 +1,10 @@
 /* Claude Code Tabs Plugin Styles */
 
+/* Utility */
+.is-hidden {
+	display: none !important;
+}
+
 /* Remove Obsidian theme/content paddings so terminal can use full tab area. */
 .workspace-leaf-content[data-type="claude-session-view"] .view-content,
 .view-content.claude-session-container {

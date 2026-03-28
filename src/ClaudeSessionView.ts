@@ -129,8 +129,7 @@ export class ClaudeSessionView extends ItemView {
 
 		this.terminalContainer = container.createDiv({ cls: 'claude-terminal' });
 
-		this.statusContainer = container.createDiv({ cls: 'claude-session-status' });
-		this.statusContainer.style.display = 'none';
+		this.statusContainer = container.createDiv({ cls: 'claude-session-status is-hidden' });
 
 		this.debugEnabled = this.isDebugEnabled();
 		this.terminal = new Terminal({
@@ -268,11 +267,11 @@ export class ClaudeSessionView extends ItemView {
 		this.isExited = true;
 
 		if (this.terminalContainer) {
-			this.terminalContainer.style.display = 'none';
+			this.terminalContainer.addClass('is-hidden');
 		}
 
 		if (this.statusContainer) {
-			this.statusContainer.style.display = 'block';
+			this.statusContainer.removeClass('is-hidden');
 			this.statusContainer.empty();
 
 			if (exitCode === 0) {
@@ -303,11 +302,11 @@ export class ClaudeSessionView extends ItemView {
 		this.isExited = true;
 
 		if (this.terminalContainer) {
-			this.terminalContainer.style.display = 'none';
+			this.terminalContainer.addClass('is-hidden');
 		}
 
 		if (this.statusContainer) {
-			this.statusContainer.style.display = 'block';
+			this.statusContainer.removeClass('is-hidden');
 			this.statusContainer.addClass('error');
 			this.statusContainer.empty();
 			this.statusContainer.createDiv({ text: `Error: ${message}`, cls: 'claude-session-status-message' });
@@ -371,12 +370,12 @@ export class ClaudeSessionView extends ItemView {
 		this.oscParser.reset();
 
 		if (this.statusContainer) {
-			this.statusContainer.style.display = 'none';
+			this.statusContainer.addClass('is-hidden');
 			this.statusContainer.removeClass('error');
 		}
 
 		if (this.terminalContainer) {
-			this.terminalContainer.style.display = 'block';
+			this.terminalContainer.removeClass('is-hidden');
 		}
 
 		if (this.terminal) {
@@ -442,8 +441,9 @@ export class ClaudeSessionView extends ItemView {
 		const theme = buildTerminalTheme(this.plugin.settings.terminalThemeName);
 		this.terminal.options.theme = theme;
 
-		// Sync terminal container background with theme
+		// Sync terminal container background with theme (dynamic value, cannot use static CSS class)
 		if (this.terminalContainer && theme.background) {
+			// eslint-disable-next-line -- dynamic theme color requires direct style property assignment
 			this.terminalContainer.style.backgroundColor = theme.background;
 		}
 	}
