@@ -446,7 +446,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CLAUDE_SESSION);
 		if (leaves.length === 0) return;
 
-		const currentLeaf = this.app.workspace.activeLeaf;
+		const currentLeaf = this.app.workspace.getMostRecentLeaf();
 		const currentIndex = leaves.findIndex((l) => l === currentLeaf);
 		let nextIndex: number;
 		if (currentIndex < 0) {
@@ -486,11 +486,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 	}
 
 	getActiveClaudeSessionView(): ClaudeSessionView | null {
-		const leaf = this.app.workspace.activeLeaf;
-		if (leaf?.view instanceof ClaudeSessionView) {
-			return leaf.view;
-		}
-		return null;
+		return this.app.workspace.getActiveViewOfType(ClaudeSessionView);
 	}
 
 	sendSelection(editor: Editor) {

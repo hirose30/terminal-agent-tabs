@@ -111,7 +111,7 @@ export class SessionSidebarView extends ItemView {
 		};
 
 		const sessionLeaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CLAUDE_SESSION);
-		const activeLeaf = this.app.workspace.activeLeaf;
+		const activeLeaf = this.app.workspace.getMostRecentLeaf();
 
 		if (sessionLeaves.length === 0) {
 			container.createDiv({ text: 'No active sessions', cls: 'claude-sidebar-empty' });
