@@ -29,10 +29,18 @@ An Obsidian plugin that lets you run multiple agent CLI sessions (Claude Code, C
 ### From GitHub Release (recommended)
 
 1. Go to the [latest release](https://github.com/hirose30/terminal-agent-tabs/releases/latest)
-2. Download `main.js`, `manifest.json`, `styles.css`
-3. Create a folder at `<vault>/.obsidian/plugins/terminal-agent-tabs/`
-4. Copy the downloaded files and the `resources/` folder into it
-5. Restart Obsidian and enable the plugin in Settings > Community Plugins
+2. Download `main.js`, `manifest.json`, `styles.css`, `pty-helper.py`, `hook-relay.py`
+3. Place them in your vault as follows:
+   ```
+   <vault>/.obsidian/plugins/terminal-agent-tabs/
+   ├── main.js
+   ├── manifest.json
+   ├── styles.css
+   └── resources/
+       ├── pty-helper.py
+       └── hook-relay.py
+   ```
+4. Restart Obsidian and enable the plugin in Settings > Community Plugins
 
 ### From Source
 
