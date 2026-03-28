@@ -30,7 +30,7 @@ export class SessionSidebarView extends ItemView {
 		return 'terminal';
 	}
 
-	async onOpen(): Promise<void> {
+	onOpen(): void {
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
 		container.addClass('claude-sidebar-container');
@@ -62,7 +62,7 @@ export class SessionSidebarView extends ItemView {
 		this.render();
 	}
 
-	async onClose(): Promise<void> {
+	onClose(): void {
 		if (this.unsubscribeNotifications) {
 			this.unsubscribeNotifications();
 			this.unsubscribeNotifications = null;

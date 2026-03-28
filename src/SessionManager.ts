@@ -107,7 +107,7 @@ export class SessionManager {
 			const stream = fs.createWriteStream(logPath, { flags: 'w', mode: 0o600 });
 			return { logPath, stream };
 		} catch (e) {
-			console.warn('[TerminalAgentTabs] Failed to prepare debug log:', e);
+			console.debug('[TerminalAgentTabs] Failed to prepare debug log:', e);
 			return null;
 		}
 	}

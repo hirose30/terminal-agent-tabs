@@ -156,7 +156,7 @@ export class ClaudeSessionView extends ItemView {
 			this.terminal.loadAddon(unicodeAddon);
 			this.terminal.unicode.activeVersion = '11';
 		} catch (e) {
-			console.warn('[TerminalAgentTabs] Unicode11 addon could not be loaded:', e);
+			console.debug('[TerminalAgentTabs] Unicode11 addon could not be loaded:', e);
 		}
 
 		this.terminal.open(this.terminalContainer);
@@ -248,7 +248,7 @@ export class ClaudeSessionView extends ItemView {
 			});
 			this.terminal.loadAddon(webglAddon);
 		} catch (e) {
-			console.warn('[TerminalAgentTabs] WebGL renderer not available, using canvas fallback:', e);
+			console.debug('[TerminalAgentTabs] WebGL renderer not available, using canvas fallback:', e);
 		}
 	}
 
@@ -483,7 +483,7 @@ export class ClaudeSessionView extends ItemView {
 			});
 		} catch (error) {
 			if (this.debugEnabled) {
-				console.warn('[TerminalAgentTabs] OSC 52 clipboard sync registration failed:', error);
+				console.debug('[TerminalAgentTabs] OSC 52 clipboard sync registration failed:', error);
 			}
 		}
 	}
@@ -508,7 +508,7 @@ export class ClaudeSessionView extends ItemView {
 			await this.writeClipboardText(text);
 		} catch (error) {
 			if (this.debugEnabled) {
-				console.warn('[TerminalAgentTabs] OSC 52 clipboard sync failed:', error);
+				console.debug('[TerminalAgentTabs] OSC 52 clipboard sync failed:', error);
 			}
 		}
 	}

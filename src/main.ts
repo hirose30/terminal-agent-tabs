@@ -471,7 +471,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 			return;
 		}
 		if (this.settings.enableDebugLogging) {
-			console.log('[TerminalAgentTabs] Choose Target selected:', selected.id, selected.displayName);
+			console.debug('[TerminalAgentTabs] Choose Target selected:', selected.id, selected.displayName);
 		}
 
 		await this.openNewSession({ cliId: selected.id });

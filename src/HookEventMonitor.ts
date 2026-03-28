@@ -49,7 +49,7 @@ export class HookEventMonitor {
 			this.readOffset = Math.max(0, stats.size);
 		} catch (error: unknown) {
 			if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT' && this.debugLogging) {
-				console.warn('[TerminalAgentTabs] hook monitor init failed:', error);
+				console.debug('[TerminalAgentTabs] hook monitor init failed:', error);
 			}
 		}
 
@@ -113,7 +113,7 @@ export class HookEventMonitor {
 			}
 		} catch (error) {
 			if (this.debugLogging) {
-				console.warn('[TerminalAgentTabs] hook event polling failed:', error);
+				console.debug('[TerminalAgentTabs] hook event polling failed:', error);
 			}
 		} finally {
 			this.pollInFlight = false;
@@ -139,7 +139,7 @@ export class HookEventMonitor {
 			payload = parsed as Record<string, unknown>;
 		} catch {
 			if (this.debugLogging) {
-				console.warn('[TerminalAgentTabs] invalid hook event json:', line);
+				console.debug('[TerminalAgentTabs] invalid hook event json:', line);
 			}
 			return;
 		}

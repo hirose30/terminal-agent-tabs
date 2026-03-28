@@ -36,6 +36,7 @@ export class OscParser {
 		// \x1b] followed by number, semicolon, text, and terminated by BEL (\x07) or ST (\x1b\\)
 		// Pattern matches: ESC ] <number> ; <text> <terminator>
 		// Extended to match OSC 0-9 (includes OSC 9 for notifications)
+		// eslint-disable-next-line no-control-regex -- OSC sequences require control character literals (\x1b ESC, \x07 BEL)
 		const oscPattern = /\x1b\](\d+);([^\x07\x1b]*?)(?:\x07|\x1b\\)/g;
 
 		let match;
@@ -55,6 +56,7 @@ export class OscParser {
 
 		// Check for incomplete OSC sequence at the end
 		// If we have an ESC ] but no terminator, buffer it for next parse
+		// eslint-disable-next-line no-control-regex -- OSC sequences require control character literals (\x1b ESC, \x07 BEL)
 		const incompleteOscMatch = combined.match(/\x1b\]\d+;[^\x07\x1b]*$/);
 		if (incompleteOscMatch) {
 			this.buffer = incompleteOscMatch[0];

@@ -16,13 +16,14 @@ export type OutputEventCallback = (sessionId: string, event: OutputEvent) => voi
 
 /** Strip ANSI escape sequences from text. */
 function stripAnsi(text: string): string {
-	// eslint-disable-next-line no-control-regex
+	/* eslint-disable no-control-regex -- ANSI stripping requires control character literals (\x1b ESC, \x07 BEL, etc.) */
 	return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
 		.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')  // OSC sequences
 		.replace(/\x1b[()][0-9A-Za-z]/g, '')                  // charset switches
 		.replace(/\x1b[=>]/g, '')                              // keypad modes
 		.replace(/\x1b\[[\?]?[0-9;]*[hlrs]/g, '')             // mode set/reset
 		.replace(/[\x00-\x08\x0e-\x1f]/g, '');                // control characters (keep \t \n \r)
+	/* eslint-enable no-control-regex */
 }
 
 /**
