@@ -6,6 +6,8 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "node esbuild.config.mjs production",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"package": "./scripts/package.sh"
 	},
 	"keywords": [
@@ -17,16 +19,22 @@
 	"author": "hirose30",
 	"license": "MIT",
 	"devDependencies": {
+		"@eslint/js": "^9.39.4",
+		"@eslint/json": "^0.14.0",
 		"@types/node": "^20.10.0",
 		"builtin-modules": "^3.3.0",
 		"esbuild": "^0.19.0",
+		"eslint": "^9.39.4",
+		"eslint-plugin-obsidianmd": "^0.1.9",
 		"obsidian": "latest",
-		"typescript": "^5.3.0"
+		"typescript": "^5.3.0",
+		"typescript-eslint": "^8.57.2",
+		"vitest": "^4.1.2"
 	},
 	"dependencies": {
 		"@xterm/addon-fit": "^0.10.0",
-		"@xterm/addon-webgl": "^0.18.0",
 		"@xterm/addon-unicode11": "^0.8.0",
+		"@xterm/addon-webgl": "^0.18.0",
 		"@xterm/xterm": "^5.4.0"
 	}
 }

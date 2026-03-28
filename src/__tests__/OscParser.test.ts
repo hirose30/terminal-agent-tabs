@@ -1,0 +1,96 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { OscParser } from '../OscParser';
+
+describe('OscParser', () => {
+	let parser: OscParser;
+
+	beforeEach(() => {
+		parser = new OscParser();
+	});
+
+	describe('parse()', () => {
+		it('extracts title from OSC 0 with BEL terminator', () => {
+			const result = parser.parse('\x1b]0;My Title\x07');
+			expect(result.title).toBe('My Title');
+		});
+
+		it('extracts title from OSC 2 with BEL terminator', () => {
+			const result = parser.parse('\x1b]2;Window Title\x07');
+			expect(result.title).toBe('Window Title');
+		});
+
+		it('extracts title from OSC 0 with ST terminator', () => {
+			const result = parser.parse('\x1b]0;My Title\x1b\\');
+			expect(result.title).toBe('My Title');
+		});
+
+		it('extracts title from OSC 9 (notification)', () => {
+			const result = parser.parse('\x1b]9;Notification text\x07');
+			expect(result.title).toBe('Notification text');
+		});
+
+		it('returns null title when no OSC sequence present', () => {
+			const result = parser.parse('Hello, world!');
+			expect(result.title).toBeNull();
+		});
+
+		it('returns last title when multiple OSC sequences in one chunk', () => {
+			const result = parser.parse('\x1b]0;First\x07\x1b]0;Second\x07');
+			expect(result.title).toBe('Second');
+		});
+
+		it('always returns original data unchanged', () => {
+			const data = '\x1b]0;Title\x07some output';
+			const result = parser.parse(data);
+			expect(result.data).toBe(data);
+		});
+
+		it('buffers incomplete OSC sequence and resolves on next call', () => {
+			// Split sequence across two calls
+			const r1 = parser.parse('\x1b]0;Spli');
+			expect(r1.title).toBeNull();
+
+			const r2 = parser.parse('t Title\x07');
+			expect(r2.title).toBe('Split Title');
+		});
+
+		it('does not extract title from OSC 3 (unsupported type)', () => {
+			const result = parser.parse('\x1b]3;ignored\x07');
+			expect(result.title).toBeNull();
+		});
+	});
+
+	describe('getCurrentTitle()', () => {
+		it('returns null initially', () => {
+			expect(parser.getCurrentTitle()).toBeNull();
+		});
+
+		it('returns last parsed title', () => {
+			parser.parse('\x1b]0;First\x07');
+			parser.parse('no osc here');
+			expect(parser.getCurrentTitle()).toBe('First');
+		});
+
+		it('updates when new title is parsed', () => {
+			parser.parse('\x1b]0;First\x07');
+			parser.parse('\x1b]0;Second\x07');
+			expect(parser.getCurrentTitle()).toBe('Second');
+		});
+	});
+
+	describe('reset()', () => {
+		it('clears current title', () => {
+			parser.parse('\x1b]0;Title\x07');
+			parser.reset();
+			expect(parser.getCurrentTitle()).toBeNull();
+		});
+
+		it('clears buffer so incomplete sequence is discarded', () => {
+			parser.parse('\x1b]0;Incomple');
+			parser.reset();
+			// After reset, the buffered partial sequence is gone
+			const result = parser.parse('te\x07');
+			expect(result.title).toBeNull();
+		});
+	});
+});
