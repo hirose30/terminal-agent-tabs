@@ -3,6 +3,7 @@ import { Writable } from 'stream';
 import { StringDecoder } from 'string_decoder';
 import * as fs from 'fs';
 import * as path from 'path';
+import { FileSystemAdapter } from 'obsidian';
 import type ClaudeCodeTabsPlugin from './main';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
@@ -27,7 +28,8 @@ export class SessionManager {
 
 	constructor(plugin: ClaudeCodeTabsPlugin) {
 		this.plugin = plugin;
-		this.vaultPath = (this.plugin.app.vault.adapter as any).basePath;
+		const adapter = this.plugin.app.vault.adapter;
+		this.vaultPath = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : '';
 		this.pluginDir = this.resolvePluginDir();
 	}
 
@@ -36,7 +38,7 @@ export class SessionManager {
 	}
 
 	private resolvePluginDir(): string {
-		const configDir = (this.plugin.app.vault as any).configDir || '.obsidian';
+		const configDir = this.plugin.app.vault.configDir;
 		const candidates = [
 			path.join(this.vaultPath, configDir, 'plugins', this.plugin.manifest.id),
 			path.join(this.vaultPath, configDir, 'plugins', 'obsidian-claude-code-tabs')

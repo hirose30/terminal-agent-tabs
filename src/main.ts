@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, Notice, FuzzySuggestModal, App, Editor } from 'obsidian';
+import { Plugin, WorkspaceLeaf, Notice, FuzzySuggestModal, App, Editor, FileSystemAdapter } from 'obsidian';
 import * as path from 'path';
 import { ClaudeSessionView, VIEW_TYPE_CLAUDE_SESSION } from './ClaudeSessionView';
 import {
@@ -279,8 +279,9 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 	}
 
 	getDefaultHookEventsFilePath(): string {
-		const vaultPath = (this.app.vault.adapter as any).basePath;
-		const configDir = (this.app.vault as any).configDir || '.obsidian';
+		const adapter = this.app.vault.adapter;
+		const vaultPath = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : '';
+		const configDir = this.app.vault.configDir;
 		return path.join(vaultPath, configDir, 'plugins', this.manifest.id, 'agent-events.jsonl');
 	}
 
