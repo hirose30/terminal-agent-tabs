@@ -134,7 +134,7 @@ export class HookEventMonitor {
 	private handleLine(line: string): void {
 		let payload: Record<string, unknown>;
 		try {
-			const parsed = JSON.parse(line);
+			const parsed: unknown = JSON.parse(line);
 			if (!parsed || typeof parsed !== 'object') return;
 			payload = parsed as Record<string, unknown>;
 		} catch {

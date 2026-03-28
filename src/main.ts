@@ -98,8 +98,8 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		);
 
 		// Ribbon icon to toggle sidebar
-		this.addRibbonIcon('terminal', 'Agent Sessions', () => {
-			this.toggleSidebar();
+		this.addRibbonIcon('terminal', 'Agent sessions', () => {
+			void this.toggleSidebar();
 		});
 
 		// Command: New Session Tab
@@ -217,7 +217,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		this.registerEvent(
 			this.app.workspace.on('active-leaf-change', (leaf) => {
 				if (leaf?.view instanceof ClaudeSessionView) {
-					const view = leaf.view as ClaudeSessionView;
+					const view = leaf.view;
 					this.sessionManager.setActiveSession(view.sessionId);
 					this.notificationStore.dismissAllForSession(view.sessionId);
 				}
@@ -231,16 +231,16 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		// Window unload handler for emergency cleanup
 		this.registerEvent(
 			this.app.workspace.on('quit', () => {
-				this.sessionManager.terminateAllSessions();
+				void this.sessionManager.terminateAllSessions();
 			})
 		);
 	}
 
-	async onunload() {
+	onunload(): void {
 		this.hookEventMonitor.stop();
 		this.dockBadge.clear();
 		this.outputMonitor.destroy();
-		await this.sessionManager.terminateAllSessions();
+		void this.sessionManager.terminateAllSessions();
 	}
 
 	async loadSettings() {
@@ -388,7 +388,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 				type: VIEW_TYPE_SESSION_SIDEBAR,
 				active: true
 			});
-			this.app.workspace.revealLeaf(leaf);
+			void this.app.workspace.revealLeaf(leaf);
 		}
 	}
 
@@ -401,7 +401,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 			state: { initialLaunchConfig: launchConfig },
 			active: true
 		});
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	async openNewSession(initialLaunchConfig?: Partial<TabLaunchConfig>) {
@@ -412,7 +412,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 			state: initialLaunchConfig ? { initialLaunchConfig } : {},
 			active: true
 		});
-		this.app.workspace.revealLeaf(leaf);
+		void this.app.workspace.revealLeaf(leaf);
 	}
 
 	consumePendingLaunchConfig(): Partial<TabLaunchConfig> | null {
@@ -441,13 +441,13 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 				l.view instanceof ClaudeSessionView && l.view.sessionId === lastActiveId
 			);
 			if (leaf) {
-				this.app.workspace.revealLeaf(leaf);
+				void this.app.workspace.revealLeaf(leaf);
 				(leaf.view as ClaudeSessionView).focusTerminal();
 				return;
 			}
 		}
 		// Fallback to first session tab
-		this.app.workspace.revealLeaf(leaves[0]);
+		void this.app.workspace.revealLeaf(leaves[0]);
 		if (leaves[0].view instanceof ClaudeSessionView) {
 			leaves[0].view.focusTerminal();
 		}
@@ -465,7 +465,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		} else {
 			nextIndex = (currentIndex + offset + leaves.length) % leaves.length;
 		}
-		this.app.workspace.revealLeaf(leaves[nextIndex]);
+		void this.app.workspace.revealLeaf(leaves[nextIndex]);
 		if (leaves[nextIndex].view instanceof ClaudeSessionView) {
 			(leaves[nextIndex].view as ClaudeSessionView).focusTerminal();
 		}

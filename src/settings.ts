@@ -55,7 +55,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 		const profiles = this.plugin.settings.cliProfiles;
 
 		containerEl.empty();
-		new Setting(containerEl).setName('Agent CLI tabs settings').setHeading();
+		new Setting(containerEl).setName('Agent CLI tabs').setHeading();
 
 		new Setting(containerEl)
 			.setName('Default CLI for new tabs')
@@ -64,7 +64,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 				for (const profile of profiles) {
 					dropdown.addOption(profile.id, `${profile.displayName} (${profile.id})`);
 				}
-				dropdown.addOption(SPECIAL_CLI_ID_DEFAULT_SHELL, 'Default Shell');
+				dropdown.addOption(SPECIAL_CLI_ID_DEFAULT_SHELL, 'Default shell');
 				dropdown
 					.setValue(this.plugin.settings.defaultCliId)
 					.onChange(async (value) => {
@@ -77,7 +77,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Add CLI profile')
-			.setDesc('Add another agent CLI profile (Codex, Gemini, Grok, etc.)')
+			.setDesc('Add another agent CLI profile')
 			.addButton((button) =>
 				button.setButtonText('Add')
 					.onClick(async () => {
@@ -104,7 +104,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 				.setName('CLI ID')
 				.setDesc('Internal identifier (lowercase letters, numbers, "-" and "_")')
 				.addText((text) => text
-					.setPlaceholder('my-cli')
+					.setPlaceholder('My-cli')
 					.setValue(profile.id)
 					.onChange(async (value) => {
 						const currentId = profile.id;
@@ -194,7 +194,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 				? `Select a Ghostty theme (${ghosttyThemes.length} available). Empty = built-in dark.`
 				: 'No Ghostty themes found. Install Ghostty or place themes in ~/.config/ghostty/themes/')
 			.addDropdown((dropdown) => {
-				dropdown.addOption('', '(Default Dark)');
+				dropdown.addOption('', '(default dark)');
 				for (const name of ghosttyThemes) {
 					dropdown.addOption(name, name);
 				}
@@ -246,8 +246,8 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Sync OSC 52 clipboard')
-			.setDesc('Apply terminal OSC 52 copy events to system clipboard.')
+			.setName('Sync terminal clipboard')
+			.setDesc('Forward terminal copy events to system clipboard.')
 			.addToggle((toggle) => toggle
 				.setValue(this.plugin.settings.enableOsc52ClipboardSync)
 				.onChange(async (value) => {
@@ -259,7 +259,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Enable hook notifications')
-			.setDesc('Show Obsidian notices from JSONL events emitted by CLI hooks.')
+			.setDesc('Show Obsidian notices from events emitted by CLI hooks.')
 			.addToggle((toggle) => toggle
 				.setValue(this.plugin.settings.enableHookNotifications)
 				.onChange(async (value) => {
@@ -303,7 +303,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 					this.plugin.restartHookEventMonitor();
 				}));
 
-		new Setting(containerEl).setName('Send selection options').setHeading();
+		new Setting(containerEl).setName('Send selection').setHeading();
 
 		new Setting(containerEl)
 			.setName('Wrap selection in code block')
@@ -329,7 +329,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Enable debug logging')
-			.setDesc('Write PTY output to per-session log files (disable when not needed)')
+			.setDesc('Write terminal output to per-session log files (disable when not needed)')
 			.addToggle((toggle) => toggle
 				.setValue(this.plugin.settings.enableDebugLogging)
 				.onChange(async (value) => {

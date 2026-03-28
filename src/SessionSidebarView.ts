@@ -23,7 +23,7 @@ export class SessionSidebarView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'Agent Sessions';
+		return 'Agent sessions';
 	}
 
 	getIcon(): string {
@@ -209,7 +209,7 @@ export class SessionSidebarView extends ItemView {
 		}
 
 		card.onclick = () => {
-			this.app.workspace.revealLeaf(leaf);
+			void this.app.workspace.revealLeaf(leaf);
 			const v = leaf.view as ClaudeSessionView;
 			v.focusTerminal();
 		};
@@ -279,16 +279,16 @@ export class SessionSidebarView extends ItemView {
 		const typeBadge = typeRow.createSpan({ cls: 'claude-sidebar-notification-type' });
 		if (notification.type === 'action_needed') {
 			typeBadge.addClass('type-action');
-			typeBadge.textContent = 'Action Needed';
+			typeBadge.textContent = 'Action needed';
 		} else if (notification.type === 'needs_input') {
 			typeBadge.addClass('type-action');
-			typeBadge.textContent = 'Needs Input';
+			typeBadge.textContent = 'Needs input';
 		} else if (notification.type === 'task_complete') {
 			typeBadge.addClass('type-complete');
-			typeBadge.textContent = 'Task Complete';
+			typeBadge.textContent = 'Task complete';
 		} else {
 			typeBadge.addClass('type-event');
-			typeBadge.textContent = 'Agent Event';
+			typeBadge.textContent = 'Agent event';
 		}
 
 		const timeAgo = this.formatTimeAgo(notification.timestamp);
@@ -323,7 +323,7 @@ export class SessionSidebarView extends ItemView {
 			targetLeaf = leaves[0];
 		}
 		if (targetLeaf) {
-			this.app.workspace.revealLeaf(targetLeaf);
+			void this.app.workspace.revealLeaf(targetLeaf);
 			// Focus the terminal inside the view
 			const view = targetLeaf.view as ClaudeSessionView;
 			view.focusTerminal();

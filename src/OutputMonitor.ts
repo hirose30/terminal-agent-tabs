@@ -21,7 +21,7 @@ function stripAnsi(text: string): string {
 		.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')  // OSC sequences
 		.replace(/\x1b[()][0-9A-Za-z]/g, '')                  // charset switches
 		.replace(/\x1b[=>]/g, '')                              // keypad modes
-		.replace(/\x1b\[[\?]?[0-9;]*[hlrs]/g, '')             // mode set/reset
+		.replace(/\x1b\[[?]?[0-9;]*[hlrs]/g, '')              // mode set/reset
 		.replace(/[\x00-\x08\x0e-\x1f]/g, '');                // control characters (keep \t \n \r)
 	/* eslint-enable no-control-regex */
 }

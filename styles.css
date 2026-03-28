@@ -107,6 +107,10 @@
 	justify-content: center;
 }
 
+.claude-session-modal-buttons {
+	margin-top: 16px;
+}
+
 .claude-session-btn {
 	padding: 8px 16px;
 	border-radius: 4px;

@@ -86,7 +86,7 @@ export class ClaudeSessionView extends ItemView {
 
 	private getInitialLaunchConfigFromLeafState(): Partial<TabLaunchConfig> | null {
 		try {
-			const state = this.leaf.getViewState().state as Record<string, unknown> | undefined;
+			const state = this.leaf.getViewState().state;
 			const launchConfig = state?.initialLaunchConfig;
 			if (launchConfig && typeof launchConfig === 'object') {
 				return launchConfig as Partial<TabLaunchConfig>;
@@ -290,17 +290,17 @@ export class ClaudeSessionView extends ItemView {
 
 			const buttonContainer = this.statusContainer.createDiv({ cls: 'claude-session-button-container' });
 
-			const newSessionBtn = buttonContainer.createEl('button', { text: 'New Session', cls: 'claude-session-btn' });
+			const newSessionBtn = buttonContainer.createEl('button', { text: 'New session', cls: 'claude-session-btn' });
 			newSessionBtn.onclick = () => { void this.restartSession('new'); };
 
-			const resumeBtn = buttonContainer.createEl('button', { text: 'Resume Session...', cls: 'claude-session-btn claude-session-btn-primary' });
+			const resumeBtn = buttonContainer.createEl('button', { text: 'Resume session...', cls: 'claude-session-btn claude-session-btn-primary' });
 			resumeBtn.disabled = !this.supportsResume;
 			resumeBtn.onclick = () => {
 				if (!this.supportsResume) return;
 				void this.restartSession('continue');
 			};
 
-			const closeBtn = buttonContainer.createEl('button', { text: 'Close Tab', cls: 'claude-session-btn' });
+			const closeBtn = buttonContainer.createEl('button', { text: 'Close tab', cls: 'claude-session-btn' });
 			closeBtn.onclick = () => this.leaf.detach();
 		}
 	}
@@ -322,11 +322,11 @@ export class ClaudeSessionView extends ItemView {
 			const buttonContainer = this.statusContainer.createDiv({ cls: 'claude-session-button-container' });
 
 			if (showNewSessionOption) {
-				const newSessionBtn = buttonContainer.createEl('button', { text: 'Start New Session', cls: 'claude-session-btn claude-session-btn-primary' });
+				const newSessionBtn = buttonContainer.createEl('button', { text: 'Start new session', cls: 'claude-session-btn claude-session-btn-primary' });
 				newSessionBtn.onclick = () => { void this.restartSession('new'); };
 			}
 
-			const closeBtn = buttonContainer.createEl('button', { text: 'Close Tab', cls: 'claude-session-btn' });
+			const closeBtn = buttonContainer.createEl('button', { text: 'Close tab', cls: 'claude-session-btn' });
 			closeBtn.onclick = () => this.leaf.detach();
 		}
 	}
@@ -447,10 +447,9 @@ export class ClaudeSessionView extends ItemView {
 		const theme = buildTerminalTheme(this.plugin.settings.terminalThemeName);
 		this.terminal.options.theme = theme;
 
-		// Sync terminal container background with theme (dynamic value, cannot use static CSS class)
+		// Sync terminal container background with theme (dynamic value from user config)
 		if (this.terminalContainer && theme.background) {
-			// eslint-disable-next-line -- dynamic theme color requires direct style property assignment
-			this.terminalContainer.style.backgroundColor = theme.background;
+			this.terminalContainer.setCssProps({ 'background-color': theme.background });
 		}
 	}
 
@@ -460,7 +459,7 @@ export class ClaudeSessionView extends ItemView {
 
 	private showForceResumeConfirmDialog(): void {
 		const modal = new ForceResumeConfirmModal(this.app, () => {
-			this.forceResumeRestart();
+			void this.forceResumeRestart();
 		});
 		modal.open();
 	}
@@ -563,11 +562,11 @@ export class ClaudeSessionView extends ItemView {
 		this.isExited = false;
 
 		if (this.statusContainer) {
-			this.statusContainer.style.display = 'none';
+			this.statusContainer.addClass('is-hidden');
 			this.statusContainer.removeClass('error');
 		}
 		if (this.terminalContainer) {
-			this.terminalContainer.style.display = 'block';
+			this.terminalContainer.removeClass('is-hidden');
 		}
 
 		if (this.terminal) {
@@ -645,13 +644,12 @@ class ForceResumeConfirmModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 
-		contentEl.createEl('h3', { text: 'Force Resume Restart' });
+		contentEl.createEl('h3', { text: 'Force resume restart' });
 		contentEl.createEl('p', {
 			text: 'This will terminate the current process and attempt to resume this tab session. Continue?'
 		});
 
-		const buttonContainer = contentEl.createDiv({ cls: 'claude-session-button-container' });
-		buttonContainer.style.marginTop = '16px';
+		const buttonContainer = contentEl.createDiv({ cls: 'claude-session-button-container claude-session-modal-buttons' });
 
 		const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel', cls: 'claude-session-btn' });
 		cancelBtn.onclick = () => this.close();
