@@ -3,8 +3,6 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebglAddon } from '@xterm/addon-webgl';
-// @ts-ignore - esbuild imports CSS as text
-import xtermCss from '@xterm/xterm/css/xterm.css';
 import type ClaudeCodeTabsPlugin from './main';
 import type { StartMode, TabLaunchConfig } from './types';
 import { OscParser } from './OscParser';
@@ -31,16 +29,6 @@ interface LeafWithTabHeader extends WorkspaceLeaf {
 	updateHeader?(): void;
 }
 
-// Inject xterm.css once globally
-let xtermCssInjected = false;
-function injectXtermCss() {
-	if (xtermCssInjected) return;
-	const style = document.createElement('style');
-	style.id = 'xterm-css';
-	style.textContent = xtermCss;
-	document.head.appendChild(style);
-	xtermCssInjected = true;
-}
 
 export const VIEW_TYPE_CLAUDE_SESSION = 'claude-session-view';
 
@@ -132,8 +120,6 @@ export class ClaudeSessionView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
-		injectXtermCss();
-
 		const pendingLaunchConfig = this.plugin.consumePendingLaunchConfig();
 		const initialLaunchConfig =
 			pendingLaunchConfig ||
