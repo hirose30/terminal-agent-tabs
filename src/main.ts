@@ -95,28 +95,28 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		// Command: New Session Tab
 		this.addCommand({
 			id: 'new-session-tab',
-			name: 'New Session Tab',
+			name: 'New session tab',
 			callback: () => this.openNewSession({ cliId: this.settings.defaultCliId })
 		});
 
 		// Command: New Session Tab (Choose Target)
 		this.addCommand({
 			id: 'new-session-tab-choose-target',
-			name: 'New Session Tab (Choose Target)',
+			name: 'New session tab (choose target)',
 			callback: () => this.openNewSessionWithPicker()
 		});
 
 		// Command: Send Selection to Current Session
 		this.addCommand({
 			id: 'send-selection',
-			name: 'Send Selection to Current Session',
+			name: 'Send selection to current session',
 			editorCallback: (editor) => this.sendSelection(editor)
 		});
 
 		// Command: Increase Font Size (this tab)
 		this.addCommand({
 			id: 'increase-font-size',
-			name: 'Increase Font Size (this tab)',
+			name: 'Increase font size (this tab)',
 			checkCallback: (checking: boolean) => {
 				const view = this.getActiveClaudeSessionView();
 				if (view) {
@@ -132,7 +132,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		// Command: Decrease Font Size (this tab)
 		this.addCommand({
 			id: 'decrease-font-size',
-			name: 'Decrease Font Size (this tab)',
+			name: 'Decrease font size (this tab)',
 			checkCallback: (checking: boolean) => {
 				const view = this.getActiveClaudeSessionView();
 				if (view) {
@@ -148,7 +148,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		// Command: Reset Font Size (this tab)
 		this.addCommand({
 			id: 'reset-font-size',
-			name: 'Reset Font Size (this tab)',
+			name: 'Reset font size (this tab)',
 			checkCallback: (checking: boolean) => {
 				const view = this.getActiveClaudeSessionView();
 				if (view) {
@@ -164,42 +164,42 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		// Command: Toggle Session Sidebar
 		this.addCommand({
 			id: 'toggle-session-sidebar',
-			name: 'Toggle Session Sidebar',
+			name: 'Toggle session sidebar',
 			callback: () => this.toggleSidebar()
 		});
 
 		// Command: Focus Active Session
 		this.addCommand({
 			id: 'focus-active-session',
-			name: 'Focus Active Session',
+			name: 'Focus active session',
 			callback: () => this.focusActiveSession()
 		});
 
 		// Command: Focus Next Session
 		this.addCommand({
 			id: 'focus-next-session',
-			name: 'Focus Next Session',
+			name: 'Focus next session',
 			callback: () => this.focusSessionByOffset(1)
 		});
 
 		// Command: Focus Previous Session
 		this.addCommand({
 			id: 'focus-previous-session',
-			name: 'Focus Previous Session',
+			name: 'Focus previous session',
 			callback: () => this.focusSessionByOffset(-1)
 		});
 
 		// Command: Split Session Horizontal
 		this.addCommand({
 			id: 'split-session-horizontal',
-			name: 'Split Session (Horizontal)',
+			name: 'Split session (horizontal)',
 			callback: () => this.splitSession('horizontal')
 		});
 
 		// Command: Split Session Vertical
 		this.addCommand({
 			id: 'split-session-vertical',
-			name: 'Split Session (Vertical)',
+			name: 'Split session (vertical)',
 			callback: () => this.splitSession('vertical')
 		});
 

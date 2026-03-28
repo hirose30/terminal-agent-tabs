@@ -55,7 +55,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 		const profiles = this.plugin.settings.cliProfiles;
 
 		containerEl.empty();
-		containerEl.createEl('h2', { text: 'Agent CLI Tabs Settings' });
+		new Setting(containerEl).setName('Agent CLI tabs settings').setHeading();
 
 		new Setting(containerEl)
 			.setName('Default CLI for new tabs')
@@ -73,7 +73,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 					});
 			});
 
-		containerEl.createEl('h3', { text: 'CLI Profiles' });
+		new Setting(containerEl).setName('CLI profiles').setHeading();
 
 		new Setting(containerEl)
 			.setName('Add CLI profile')
@@ -87,7 +87,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 			);
 
 		for (const profile of profiles) {
-			containerEl.createEl('h4', { text: `${profile.displayName} (${profile.id})` });
+			new Setting(containerEl).setName(`${profile.displayName} (${profile.id})`).setHeading();
 
 			new Setting(containerEl)
 				.setName('Display name')
@@ -185,8 +185,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 				);
 		}
 
-		containerEl.createEl('hr');
-		containerEl.createEl('h3', { text: 'Terminal Appearance' });
+		new Setting(containerEl).setName('Terminal appearance').setHeading();
 
 		const ghosttyThemes = listGhosttyThemes();
 		new Setting(containerEl)
@@ -256,7 +255,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		containerEl.createEl('h3', { text: 'Agent Hook Notifications' });
+		new Setting(containerEl).setName('Agent hook notifications').setHeading();
 
 		new Setting(containerEl)
 			.setName('Enable hook notifications')
@@ -304,7 +303,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 					this.plugin.restartHookEventMonitor();
 				}));
 
-		containerEl.createEl('h3', { text: 'Send Selection Options' });
+		new Setting(containerEl).setName('Send selection options').setHeading();
 
 		new Setting(containerEl)
 			.setName('Wrap selection in code block')
@@ -326,7 +325,7 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		containerEl.createEl('h3', { text: 'Debug' });
+		new Setting(containerEl).setName('Debug').setHeading();
 
 		new Setting(containerEl)
 			.setName('Enable debug logging')
