@@ -7,8 +7,10 @@
 
 ## Commands
 ```bash
-npm run build   # Production build
-npm run dev     # Watch mode
+npm run build      # Production build
+npm run dev        # Watch mode
+npm test           # Run unit tests (vitest)
+npm run test:watch # Watch mode for tests
 ```
 
 ## Project Structure
@@ -36,6 +38,19 @@ resources/
 
 ## Development Flow
 - Never push directly to main. Always create a branch and merge via pull request.
+
+## Unit Tests
+
+Vitest covers pure logic modules that have no Obsidian API dependency:
+
+| File | What's tested |
+|------|--------------|
+| `OscParser.ts` | OSC sequence parsing, split-chunk buffering, reset |
+| `OutputMonitor.ts` | ANSI stripping, last-line tracking, pattern detection (fake timers) |
+| `HookEventMonitor.ts` | `classifyHookEvent()` — event classification logic |
+| `NotificationStore.ts` | Add/dismiss/clear, per-session counts, onChange subscriptions |
+
+Tests live in `src/__tests__/`. Obsidian API–dependent code (Views, Plugin, SessionManager) is **not** unit-tested — use manual UAT for those.
 
 ## ESLint (Obsidian Community Plugin Validation)
 
