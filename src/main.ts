@@ -96,14 +96,14 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		this.addCommand({
 			id: 'new-session-tab',
 			name: 'New session tab',
-			callback: () => this.openNewSession({ cliId: this.settings.defaultCliId })
+			callback: () => { void this.openNewSession({ cliId: this.settings.defaultCliId }); }
 		});
 
 		// Command: New Session Tab (Choose Target)
 		this.addCommand({
 			id: 'new-session-tab-choose-target',
 			name: 'New session tab (choose target)',
-			callback: () => this.openNewSessionWithPicker()
+			callback: () => { void this.openNewSessionWithPicker(); }
 		});
 
 		// Command: Send Selection to Current Session
@@ -165,7 +165,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		this.addCommand({
 			id: 'toggle-session-sidebar',
 			name: 'Toggle session sidebar',
-			callback: () => this.toggleSidebar()
+			callback: () => { void this.toggleSidebar(); }
 		});
 
 		// Command: Focus Active Session
@@ -193,14 +193,14 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		this.addCommand({
 			id: 'split-session-horizontal',
 			name: 'Split session (horizontal)',
-			callback: () => this.splitSession('horizontal')
+			callback: () => { void this.splitSession('horizontal'); }
 		});
 
 		// Command: Split Session Vertical
 		this.addCommand({
 			id: 'split-session-vertical',
 			name: 'Split session (vertical)',
-			callback: () => this.splitSession('vertical')
+			callback: () => { void this.splitSession('vertical'); }
 		});
 
 		// Track active session for Send Selection + mark notifications as read

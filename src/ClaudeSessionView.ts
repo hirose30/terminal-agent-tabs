@@ -284,13 +284,13 @@ export class ClaudeSessionView extends ItemView {
 			const buttonContainer = this.statusContainer.createDiv({ cls: 'claude-session-button-container' });
 
 			const newSessionBtn = buttonContainer.createEl('button', { text: 'New Session', cls: 'claude-session-btn' });
-			newSessionBtn.onclick = () => this.restartSession('new');
+			newSessionBtn.onclick = () => { void this.restartSession('new'); };
 
 			const resumeBtn = buttonContainer.createEl('button', { text: 'Resume Session...', cls: 'claude-session-btn claude-session-btn-primary' });
 			resumeBtn.disabled = !this.supportsResume;
 			resumeBtn.onclick = () => {
 				if (!this.supportsResume) return;
-				this.restartSession('continue');
+				void this.restartSession('continue');
 			};
 
 			const closeBtn = buttonContainer.createEl('button', { text: 'Close Tab', cls: 'claude-session-btn' });
@@ -316,7 +316,7 @@ export class ClaudeSessionView extends ItemView {
 
 			if (showNewSessionOption) {
 				const newSessionBtn = buttonContainer.createEl('button', { text: 'Start New Session', cls: 'claude-session-btn claude-session-btn-primary' });
-				newSessionBtn.onclick = () => this.restartSession('new');
+				newSessionBtn.onclick = () => { void this.restartSession('new'); };
 			}
 
 			const closeBtn = buttonContainer.createEl('button', { text: 'Close Tab', cls: 'claude-session-btn' });
