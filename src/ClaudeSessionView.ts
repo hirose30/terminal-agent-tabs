@@ -10,6 +10,27 @@ import type { StartMode, TabLaunchConfig } from './types';
 import { OscParser } from './OscParser';
 import { buildTerminalTheme, increaseFontSize, decreaseFontSize } from './TerminalTheme';
 
+/** Electron module shape exposed via window.require('electron') in Obsidian desktop */
+interface ElectronModule {
+	clipboard?: { writeText(text: string): void };
+}
+interface ElectronRequireWindow extends Window {
+	require?: (module: 'electron') => ElectronModule;
+}
+
+/** xterm private parser API (not part of public types) */
+interface TerminalWithParser extends Terminal {
+	parser?: {
+		registerOscHandler(id: number, cb: (data: string) => boolean): { dispose(): void };
+	};
+}
+
+/** WorkspaceLeaf private DOM properties not exposed in public types */
+interface LeafWithTabHeader extends WorkspaceLeaf {
+	tabHeaderEl?: HTMLElement;
+	updateHeader?(): void;
+}
+
 // Inject xterm.css once globally
 let xtermCssInjected = false;
 function injectXtermCss() {
@@ -145,7 +166,7 @@ export class ClaudeSessionView extends ItemView {
 			cancelEvents: true,
 			macOptionIsMeta: true,
 			theme: buildTerminalTheme(this.plugin.settings.terminalThemeName)
-		} as any);
+		});
 
 		this.fitAddon = new FitAddon();
 		this.terminal.loadAddon(this.fitAddon);
@@ -326,8 +347,7 @@ export class ClaudeSessionView extends ItemView {
 
 	private updateHeaderText(title: string): void {
 		this.headerText = title || this.headerText || 'Coding Session';
-		// @ts-ignore - updateHeader is not in the type definitions but exists
-		this.leaf.updateHeader();
+		(this.leaf as LeafWithTabHeader).updateHeader?.();
 		this.plugin.sessionManager.updateSessionHeader(this.sessionId, this.headerText);
 		this.updateTabBadge();
 	}
@@ -335,7 +355,7 @@ export class ClaudeSessionView extends ItemView {
 	private updateTabBadge(): void {
 		const notificationCount = this.plugin.notificationStore.getCountForSession(this.sessionId);
 
-		const tabHeaderEl = (this.leaf as any).tabHeaderEl as HTMLElement | undefined;
+		const tabHeaderEl = (this.leaf as LeafWithTabHeader).tabHeaderEl;
 		if (!tabHeaderEl) return;
 
 		if (this.badgeEl) {
@@ -469,7 +489,7 @@ export class ClaudeSessionView extends ItemView {
 		if (!this.terminal) return;
 
 		try {
-			const parser = (this.terminal as any).parser;
+			const parser = (this.terminal as TerminalWithParser).parser;
 			if (!parser?.registerOscHandler) {
 				return;
 			}
@@ -533,7 +553,7 @@ export class ClaudeSessionView extends ItemView {
 	}
 
 	private async writeClipboardText(text: string): Promise<void> {
-		const electron = (window as any).require?.('electron');
+		const electron = (window as ElectronRequireWindow).require?.('electron');
 		if (electron?.clipboard?.writeText) {
 			electron.clipboard.writeText(text);
 			return;

@@ -20,6 +20,16 @@ import {
 } from './types';
 import { migrateCliProfiles, type LegacySettingsShape } from './SettingsMigration';
 
+/** Electron shell/beep API exposed via window.require('electron') in Obsidian desktop */
+interface ElectronShellModule {
+	shell?: { beep(): void };
+}
+interface ElectronRequireWindow extends Window {
+	require?: (module: 'electron') => ElectronShellModule;
+	AudioContext?: typeof AudioContext;
+	webkitAudioContext?: typeof AudioContext;
+}
+
 function sanitizeTerminalFontFamily(value: unknown): string {
 	if (typeof value !== 'string') return DEFAULT_TERMINAL_FONT_FAMILY;
 	const trimmed = value.trim();
@@ -325,7 +335,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		if (!this.settings.enableHookNotificationSound) return;
 
 		try {
-			const electron = (window as any).require?.('electron');
+			const electron = (window as ElectronRequireWindow).require?.('electron');
 			if (electron?.shell?.beep) {
 				electron.shell.beep();
 				if (kind === 'action') {
@@ -344,7 +354,8 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		}
 
 		try {
-			const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+			const w = window as ElectronRequireWindow;
+			const AudioCtx = w.AudioContext ?? w.webkitAudioContext;
 			if (!AudioCtx) return;
 			const ctx = new AudioCtx();
 			const osc = ctx.createOscillator();

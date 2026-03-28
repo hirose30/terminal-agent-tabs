@@ -5,6 +5,17 @@
  * Windows (setOverlayIcon) and Linux (setBadgeCount) can be added later.
  */
 
+interface ElectronRemote {
+	app?: { dock?: { setBadge(badge: string): void } };
+}
+interface ElectronModule {
+	remote?: ElectronRemote;
+}
+interface ElectronRequireWindow extends Window {
+	require?: (module: 'electron') => ElectronModule;
+	electron?: { remote?: ElectronRemote };
+}
+
 export class DockBadge {
 	private currentCount: number = 0;
 
@@ -36,10 +47,11 @@ export class DockBadge {
 		}
 	}
 
-	private getElectronRemote(): Record<string, any> | null {
+	private getElectronRemote(): ElectronRemote | null {
 		try {
-			const electron = (window as any).require?.('electron');
-			return electron?.remote ?? (window as any).electron?.remote ?? null;
+			const w = window as ElectronRequireWindow;
+			const electron = w.require?.('electron');
+			return electron?.remote ?? w.electron?.remote ?? null;
 		} catch {
 			return null;
 		}
