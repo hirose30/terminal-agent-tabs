@@ -224,13 +224,13 @@ export class SessionManager {
 		return profile.supportsResume && profile.resumeArgs.length > 0;
 	}
 
-	async createSession(
+	createSession(
 		sessionId: string,
 		onData: (data: string) => void,
 		onExit: (exitCode: number) => void,
 		startMode: StartMode = 'new',
 		launchConfig?: Partial<TabLaunchConfig>
-	): Promise<Session> {
+	): Session {
 		const resolvedLaunchConfig = this.resolveLaunchConfig(launchConfig);
 		const profile = this.resolveCliProfile(resolvedLaunchConfig.cliId);
 		const launchCommand = this.buildLaunchCommand(

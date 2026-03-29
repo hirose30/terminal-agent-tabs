@@ -23,7 +23,7 @@ function stripAnsi(text: string): string {
 		.replace(/\x1b[=>]/g, '')                              // keypad modes
 		.replace(/\x1b\[[?]?[0-9;]*[hlrs]/g, '')              // mode set/reset
 		.replace(/[\x00-\x08\x0e-\x1f]/g, '');                // control characters (keep \t \n \r)
-	/* eslint-enable no-control-regex */
+	/* eslint-enable no-control-regex -- end of ANSI stripping block */
 }
 
 /**

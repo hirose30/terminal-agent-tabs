@@ -590,7 +590,7 @@ export class ClaudeSessionView extends ItemView {
 		}
 
 		try {
-			await this.plugin.sessionManager.createSession(
+			this.plugin.sessionManager.createSession(
 				this.sessionId,
 				(data: string) => {
 					if (this.terminal && !this.isExited) {
