@@ -206,7 +206,7 @@ export class ClaudeSessionView extends ItemView {
 
 		this.updateDefaultHeaderFromConfig();
 
-		await this.startSession('new');
+		this.startSession('new');
 
 		// Focus terminal after session starts so user can type immediately
 		if (this.terminal) {
@@ -291,13 +291,13 @@ export class ClaudeSessionView extends ItemView {
 			const buttonContainer = this.statusContainer.createDiv({ cls: 'claude-session-button-container' });
 
 			const newSessionBtn = buttonContainer.createEl('button', { text: 'New session', cls: 'claude-session-btn' });
-			newSessionBtn.onclick = () => { void this.restartSession('new'); };
+			newSessionBtn.onclick = () => { this.restartSession('new'); };
 
 			const resumeBtn = buttonContainer.createEl('button', { text: 'Resume session...', cls: 'claude-session-btn claude-session-btn-primary' });
 			resumeBtn.disabled = !this.supportsResume;
 			resumeBtn.onclick = () => {
 				if (!this.supportsResume) return;
-				void this.restartSession('continue');
+				this.restartSession('continue');
 			};
 
 			const closeBtn = buttonContainer.createEl('button', { text: 'Close tab', cls: 'claude-session-btn' });
@@ -323,7 +323,7 @@ export class ClaudeSessionView extends ItemView {
 
 			if (showNewSessionOption) {
 				const newSessionBtn = buttonContainer.createEl('button', { text: 'Start new session', cls: 'claude-session-btn claude-session-btn-primary' });
-				newSessionBtn.onclick = () => { void this.restartSession('new'); };
+				newSessionBtn.onclick = () => { this.restartSession('new'); };
 			}
 
 			const closeBtn = buttonContainer.createEl('button', { text: 'Close tab', cls: 'claude-session-btn' });
@@ -371,7 +371,7 @@ export class ClaudeSessionView extends ItemView {
 		this.updateHeaderText(`${cliLabel} Session`);
 	}
 
-	private async restartSession(startMode: StartMode = 'new'): Promise<void> {
+	private restartSession(startMode: StartMode = 'new'): void {
 		this.isExited = false;
 		this.oscParser.reset();
 
@@ -388,7 +388,7 @@ export class ClaudeSessionView extends ItemView {
 			this.terminal.clear();
 		}
 
-		await this.startSession(startMode, {
+		this.startSession(startMode, {
 			parseOsc: true,
 			showNewSessionOptionOnError: startMode === 'continue'
 		});
@@ -573,13 +573,13 @@ export class ClaudeSessionView extends ItemView {
 			this.terminal.clear();
 		}
 
-		await this.startSession('continue', {
+		this.startSession('continue', {
 			parseOsc: false,
 			showNewSessionOptionOnError: true
 		});
 	}
 
-	private async startSession(startMode: StartMode = 'new', options?: { parseOsc?: boolean; showNewSessionOptionOnError?: boolean }): Promise<void> {
+	private startSession(startMode: StartMode = 'new', options?: { parseOsc?: boolean; showNewSessionOptionOnError?: boolean }): void {
 		const { parseOsc = true, showNewSessionOptionOnError = false } = options || {};
 		const launchConfig = this.tabLaunchConfig || this.plugin.sessionManager.getDefaultLaunchConfig();
 		const canResume = this.plugin.sessionManager.isResumeSupportedForConfig(launchConfig);
