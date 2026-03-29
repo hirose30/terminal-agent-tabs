@@ -17,4 +17,10 @@ export default defineConfig([
 			},
 		},
 	},
+	{
+		files: ["src/__tests__/**/*.ts"],
+		rules: {
+			"@typescript-eslint/no-unsafe-assignment": "off",
+		},
+	},
 ]);
