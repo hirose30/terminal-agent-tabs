@@ -18,6 +18,7 @@ export default defineConfig([
 		},
 		rules: {
 			"@typescript-eslint/require-await": "error",
+			"@typescript-eslint/ban-ts-comment": "error",
 		},
 	},
 	{
