@@ -119,6 +119,7 @@ export class ClaudeSessionView extends ItemView {
 		});
 	}
 
+	// eslint-disable-next-line @typescript-eslint/require-await -- Obsidian API requires Promise<void> return type
 	async onOpen(): Promise<void> {
 		const pendingLaunchConfig = this.plugin.consumePendingLaunchConfig();
 		const initialLaunchConfig =

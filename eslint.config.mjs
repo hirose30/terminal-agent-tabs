@@ -16,6 +16,9 @@ export default defineConfig([
 				NodeJS: "readonly",
 			},
 		},
+		rules: {
+			"@typescript-eslint/require-await": "error",
+		},
 	},
 	{
 		files: ["src/__tests__/**/*.ts"],
