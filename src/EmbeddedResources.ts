@@ -40,13 +40,24 @@ function writeIfDifferent(target: string, content: string, mode: number): void {
 		existing = null;
 	}
 
+	let needsChmod = false;
 	if (existing !== content) {
 		fs.writeFileSync(target, content, { mode });
+		needsChmod = true;
+	} else {
+		try {
+			const stat = fs.statSync(target);
+			if ((stat.mode & 0o777) !== mode) needsChmod = true;
+		} catch {
+			// stat shouldn't fail here, but if it does just skip chmod
+		}
 	}
 
-	try {
-		fs.chmodSync(target, mode);
-	} catch {
-		// chmod is best-effort; some filesystems (e.g. cloud sync) may reject it
+	if (needsChmod) {
+		try {
+			fs.chmodSync(target, mode);
+		} catch {
+			// chmod is best-effort; some filesystems (e.g. cloud sync) may reject it
+		}
 	}
 }
