@@ -2,6 +2,8 @@
 
 An Obsidian plugin that lets you run multiple agent CLI sessions (Claude Code, Codex, Gemini CLI, etc.) as tabs within Obsidian.
 
+> **Platform support**: only macOS is actively tested and supported. The plugin relies on a POSIX PTY (`os.openpty` / `fcntl`) provided by the bundled `pty-helper.py`, so **Windows is not supported** and will not work. **Linux** may work in principle since the PTY APIs exist, but it has not been verified — use at your own risk and please report results.
+
 ## Features
 
 - **Multiple Sessions**: Run multiple CLI sessions in parallel as Obsidian tabs
@@ -26,31 +28,29 @@ An Obsidian plugin that lets you run multiple agent CLI sessions (Claude Code, C
 
 ## Installation
 
-### From GitHub Release (recommended)
+### From the Obsidian community directory (recommended)
+
+1. Open **Settings → Community plugins → Browse**
+2. Search for **Terminal Agent Tabs** and install
+3. Enable the plugin
+
+The Python helper scripts that drive the PTY are bundled inside `main.js` and extracted automatically to `<plugin>/resources/` on first load — no manual setup is required.
+
+> **Note on 1.0.0 and 1.0.1**: those releases shipped `pty-helper.py` and `hook-relay.py` as separate files in the GitHub release. Because the Obsidian community installer only ships `main.js` / `manifest.json` / `styles.css`, users installing through the directory ended up without these helpers and sessions never started. **1.0.2 fixes this by embedding the helpers in `main.js` and writing them to disk at startup.** If you were affected, just update to 1.0.2 — the missing files are restored automatically.
+
+### From GitHub Release
 
 1. Go to the [latest release](https://github.com/hirose30/terminal-agent-tabs/releases/latest)
-2. Download `main.js`, `manifest.json`, `styles.css`, `pty-helper.py`, `hook-relay.py`
-3. Place them in your vault as follows:
-   ```
-   <vault>/.obsidian/plugins/terminal-agent-tabs/
-   ├── main.js
-   ├── manifest.json
-   ├── styles.css
-   └── resources/
-       ├── pty-helper.py
-       └── hook-relay.py
-   ```
-4. Restart Obsidian and enable the plugin in Settings > Community Plugins
+2. Download `main.js`, `manifest.json`, `styles.css`
+3. Place them in `<vault>/.obsidian/plugins/terminal-agent-tabs/`
+4. Reload Obsidian and enable the plugin in Settings → Community plugins
 
 ### From Source
 
 1. Clone this repository
 2. Run `npm install && npm run build`
-3. Copy `main.js`, `manifest.json`, `styles.css`, and the `resources/` folder to:
-   ```
-   <vault>/.obsidian/plugins/terminal-agent-tabs/
-   ```
-4. Restart Obsidian and enable the plugin in Settings > Community Plugins
+3. Copy `main.js`, `manifest.json`, `styles.css` to `<vault>/.obsidian/plugins/terminal-agent-tabs/`
+4. Reload Obsidian and enable the plugin in Settings → Community plugins
 
 ## Commands
 
@@ -69,6 +69,8 @@ An Obsidian plugin that lets you run multiple agent CLI sessions (Claude Code, C
 
 ### CLI Profiles
 Configure one or more CLI profiles with custom executable paths, default arguments, and resume support.
+
+Relative executable names (e.g. `claude`) are resolved through your login shell (`$SHELL -l -i`), so binaries installed via Homebrew, nvm, asdf, mise, npm-global, etc. are reachable even when Obsidian is launched from the macOS dock. If you prefer to skip shell resolution, enter an absolute path instead.
 
 ### Terminal Appearance
 - Color theme (Ghostty themes supported)

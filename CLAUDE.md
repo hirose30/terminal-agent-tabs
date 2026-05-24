@@ -23,6 +23,7 @@ src/
 ├── NotificationStore.ts # In-memory notification state
 ├── HookEventMonitor.ts  # JSONL hook event polling & classification
 ├── OutputMonitor.ts     # Terminal output pattern detection
+├── EmbeddedResources.ts # Extract bundled Python helpers to <plugin>/resources/
 ├── DockBadge.ts         # macOS dock badge
 ├── OscParser.ts         # OSC escape sequence parser
 ├── TerminalTheme.ts     # Theme interface
@@ -31,10 +32,20 @@ src/
 ├── settings.ts          # Settings tab UI
 ├── SettingsMigration.ts # Legacy settings migration
 ├── types.ts             # Interfaces & defaults
-└── utils.ts             # Utilities
+├── utils.ts             # Utilities
+└── resources.d.ts       # TypeScript module declaration for *.py imports
 resources/
-└── pty-helper.py        # Python PTY helper
+├── pty-helper.py        # Python PTY helper (bundled into main.js at build)
+└── hook-relay.py        # Hook event relay (bundled into main.js at build)
 ```
+
+## Distribution model
+
+Obsidian community plugin installer only deploys `main.js` / `manifest.json` /
+`styles.css`. The Python helpers are embedded in `main.js` (esbuild `.py` text
+loader) and written to `<vault>/.obsidian/plugins/terminal-agent-tabs/resources/`
+by `ensureEmbeddedResources()` on every plugin load. The release ships only
+those three files; `scripts/release.sh` does not attach the `.py` files.
 
 ## Development Flow
 - Never push directly to main. Always create a branch and merge via pull request.
