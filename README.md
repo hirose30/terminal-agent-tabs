@@ -2,6 +2,8 @@
 
 An Obsidian plugin that lets you run multiple agent CLI sessions (Claude Code, Codex, Gemini CLI, etc.) as tabs within Obsidian.
 
+> **Platform support**: only macOS is actively tested and supported. The plugin relies on a POSIX PTY (`os.openpty` / `fcntl`) provided by the bundled `pty-helper.py`, so **Windows is not supported** and will not work. **Linux** may work in principle since the PTY APIs exist, but it has not been verified — use at your own risk and please report results.
+
 ## Features
 
 - **Multiple Sessions**: Run multiple CLI sessions in parallel as Obsidian tabs
