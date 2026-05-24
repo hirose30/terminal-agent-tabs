@@ -9,6 +9,7 @@ import { NotificationStore } from './NotificationStore';
 import { OutputMonitor } from './OutputMonitor';
 import { HookEventMonitor } from './HookEventMonitor';
 import { DockBadge } from './DockBadge';
+import { ensureEmbeddedResources } from './EmbeddedResources';
 import { SessionSidebarView, VIEW_TYPE_SESSION_SIDEBAR } from './SessionSidebarView';
 import { ClaudeCodeTabsSettingTab } from './settings';
 import {
@@ -56,6 +57,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.sessionManager = new SessionManager(this);
+		ensureEmbeddedResources(this.sessionManager.getPluginDir());
 		this.notificationStore = new NotificationStore();
 		this.outputMonitor = new OutputMonitor();
 		this.dockBadge = new DockBadge();

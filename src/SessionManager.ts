@@ -18,6 +18,16 @@ export const SPECIAL_CLI_ID_DEFAULT_SHELL = '__default_shell__';
 
 export type SessionChangeCallback = () => void;
 
+/**
+ * POSIX shell single-quote a string so it survives being passed via `sh -c`.
+ * Wraps in single quotes; any embedded single quotes are split out and escaped.
+ */
+function shellQuote(arg: string): string {
+	if (arg === '') return "''";
+	if (/^[A-Za-z0-9_\-.,:/=@%+]+$/.test(arg)) return arg;
+	return "'" + arg.replace(/'/g, "'\\''") + "'";
+}
+
 export class SessionManager {
 	private plugin: ClaudeCodeTabsPlugin;
 	private sessions: Map<string, Session> = new Map();
@@ -31,6 +41,10 @@ export class SessionManager {
 		const adapter = this.plugin.app.vault.adapter;
 		this.vaultPath = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : '';
 		this.pluginDir = this.resolvePluginDir();
+	}
+
+	getPluginDir(): string {
+		return this.pluginDir;
 	}
 
 	private getPtyHelperPath(): string {
@@ -158,15 +172,33 @@ export class SessionManager {
 		const shouldResume = startMode === 'continue' && canResume;
 
 		const hookArgs = this.buildHookArgs(profile);
+		const args = [
+			...hookArgs,
+			...profile.defaultArgs,
+			...(shouldResume ? profile.resumeArgs : []),
+			...additionalArgs
+		];
+
+		// GUI-launched Obsidian inherits launchd's minimal PATH and never loads
+		// the user's shell rc files (.zprofile/.zshrc/.bashrc). When the user
+		// configures a relative executable name (the default for `claude`),
+		// resolving it requires the same PATH their interactive terminal sees.
+		// Wrap the launch in a login + interactive shell so binaries installed
+		// via brew, nvm, asdf, mise, npm-global, cmux, etc. are reachable.
+		// This is what VSCode / iTerm integrated terminals do.
+		if (!path.isAbsolute(profile.executablePath)) {
+			const userShell = process.env.SHELL || '/bin/zsh';
+			const quoted = [profile.executablePath, ...args].map(shellQuote).join(' ');
+			return {
+				executablePath: userShell,
+				args: ['-l', '-i', '-c', `exec ${quoted}`],
+				supportsResume: canResume
+			};
+		}
 
 		return {
 			executablePath: profile.executablePath,
-			args: [
-				...hookArgs,
-				...profile.defaultArgs,
-				...(shouldResume ? profile.resumeArgs : []),
-				...additionalArgs
-			],
+			args,
 			supportsResume: canResume
 		};
 	}

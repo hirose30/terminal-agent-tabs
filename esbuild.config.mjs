@@ -32,7 +32,8 @@ const context = await esbuild.context({
 	outfile: 'main.js',
 	platform: 'node',
 	loader: {
-		'.css': 'text'
+		'.css': 'text',
+		'.py': 'text'
 	}
 });
 

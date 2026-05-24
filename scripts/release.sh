@@ -72,7 +72,7 @@ echo "Building..."
 npm run build
 
 # 5. Verify build outputs exist
-for f in main.js manifest.json styles.css resources/pty-helper.py resources/hook-relay.py; do
+for f in main.js manifest.json styles.css; do
 	if [[ ! -f "${f}" ]]; then
 		echo "Error: missing release asset: ${f}" >&2
 		exit 1
@@ -91,16 +91,18 @@ echo "Pushing to public..."
 git push public main "${NEW_VERSION}"
 
 # 8. Create GitHub release on public repo
+# Note: pty-helper.py and hook-relay.py are NOT attached. They are bundled
+# into main.js by esbuild and extracted by EmbeddedResources at plugin load,
+# so the release ships the same three files the Obsidian community installer
+# would deploy.
 echo "Creating GitHub release..."
 gh release create "${NEW_VERSION}" \
 	--repo hirose30/terminal-agent-tabs \
 	--title "${NEW_VERSION}" \
-	--notes "Release ${NEW_VERSION}" \
+	--notes "See CHANGELOG.md for details." \
 	main.js \
 	manifest.json \
-	styles.css \
-	resources/pty-helper.py \
-	resources/hook-relay.py
+	styles.css
 
 echo ""
 echo "Done! Release ${NEW_VERSION} published."
