@@ -288,7 +288,13 @@ export class ClaudeSessionView extends ItemView {
 	private saveScrollbackNow(): void {
 		if (!this.terminal || !this.serializeAddon || !this.resumeKey) return;
 		try {
-			const content = this.serializeAddon.serialize({ scrollback: 4000 });
+			// excludeModes/excludeAltBuffer keep the dump to plain normal-buffer text:
+			// replaying mode-set or alt-screen sequences can corrupt a fresh terminal.
+			const content = this.serializeAddon.serialize({
+				scrollback: 4000,
+				excludeModes: true,
+				excludeAltBuffer: true
+			});
 			this.plugin.sessionManager.saveScrollback(this.resumeKey, content);
 			this.scrollbackDirty = false;
 		} catch (e) {
@@ -321,8 +327,10 @@ export class ClaudeSessionView extends ItemView {
 		const isRestore = this.restoredCwd != null || this.resumeKey != null;
 		const startMode: StartMode = isRestore && this.canResumeRestoredSession() ? 'continue' : 'new';
 
-		// Phase 4: repaint the last screen before the (re)started session takes over.
-		if (isRestore && this.resumeKey && this.terminal) {
+		// Phase 4: repaint the last screen only for sessions that won't redraw themselves.
+		// A resumed agent (`claude --resume`, `codex resume`) repaints its own UI, and
+		// replaying a TUI's serialized buffer can corrupt the display — so repaint on 'new' only.
+		if (isRestore && startMode === 'new' && this.resumeKey && this.terminal) {
 			const scrollback = this.plugin.sessionManager.loadScrollback(this.resumeKey);
 			if (scrollback) {
 				this.terminal.write(scrollback);
