@@ -3,6 +3,7 @@ import { Writable } from 'stream';
 import { StringDecoder } from 'string_decoder';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { FileSystemAdapter } from 'obsidian';
 import type ClaudeCodeTabsPlugin from './main';
 import type { Terminal } from '@xterm/xterm';
@@ -11,7 +12,8 @@ import type {
 	Session,
 	StartMode,
 	TabLaunchConfig,
-	CliProfile
+	CliProfile,
+	ResumeStrategy
 } from './types';
 
 export const SPECIAL_CLI_ID_DEFAULT_SHELL = '__default_shell__';
@@ -167,17 +169,66 @@ export class SessionManager {
 		throw new Error('No CLI profile is configured. Add one in plugin settings.');
 	}
 
-	private buildLaunchCommand(profile: CliProfile, startMode: StartMode, additionalArgs: string[]) {
-		const canResume = profile.supportsResume && profile.resumeArgs.length > 0;
-		const shouldResume = startMode === 'continue' && canResume;
+	/**
+	 * Resolve a profile's Tier1 resume strategy. Explicit `resumeStrategy` wins;
+	 * otherwise infer from the executable so existing claude/codex profiles work
+	 * without reconfiguration. Everything else → 'none'.
+	 */
+	private resolveResumeStrategy(profile: CliProfile): ResumeStrategy {
+		if (profile.resumeStrategy) return profile.resumeStrategy;
+		const exe = profile.executablePath.toLowerCase();
+		if (exe === 'claude' || exe.endsWith('/claude') || profile.id === 'claude') return 'assign-id';
+		if (exe === 'codex' || exe.endsWith('/codex') || profile.id === 'codex') return 'continue-latest';
+		return 'none';
+	}
+
+	getResumeStrategy(launchConfig: TabLaunchConfig): ResumeStrategy {
+		return this.resolveResumeStrategy(this.resolveCliProfile(launchConfig.cliId));
+	}
+
+	/**
+	 * Whether a Claude transcript exists for (cwd, sessionId), used to decide if an
+	 * `assign-id` tab can be resumed. Read-only check against ~/.claude/projects.
+	 * Claude encodes the cwd by realpath-ing it and replacing '/' and '.' with '-'.
+	 */
+	claudeTranscriptExists(cwd: string, sessionId: string): boolean {
+		if (!cwd || !sessionId) return false;
+		try {
+			let real = cwd;
+			try { real = fs.realpathSync(cwd); } catch { /* fall back to the raw path */ }
+			const encoded = real.replace(/[/.]/g, '-');
+			const transcript = path.join(os.homedir(), '.claude', 'projects', encoded, `${sessionId}.jsonl`);
+			return fs.existsSync(transcript);
+		} catch {
+			return false;
+		}
+	}
+
+	private buildLaunchCommand(profile: CliProfile, startMode: StartMode, additionalArgs: string[], resumeKey?: string) {
+		const strategy = this.resolveResumeStrategy(profile);
+		const legacyCanResume = profile.supportsResume && profile.resumeArgs.length > 0;
+		const canResume = strategy === 'assign-id' || strategy === 'continue-latest' || legacyCanResume;
 
 		const hookArgs = this.buildHookArgs(profile);
-		const args = [
-			...hookArgs,
-			...profile.defaultArgs,
-			...(shouldResume ? profile.resumeArgs : []),
-			...additionalArgs
-		];
+		const base = [...hookArgs, ...profile.defaultArgs];
+
+		let coreArgs: string[];
+		if (strategy === 'assign-id' && resumeKey) {
+			// Tier1 (Claude): deterministic per-tab id — assign on new, resume by id on restore.
+			coreArgs = startMode === 'continue'
+				? [...base, '--resume', resumeKey]
+				: [...base, '--session-id', resumeKey];
+		} else if (strategy === 'continue-latest' && startMode === 'continue') {
+			// Tier1 (Codex): resume the most recent session scoped to the cwd. Subcommand goes first.
+			coreArgs = ['resume', '--last', ...base];
+		} else if (startMode === 'continue' && legacyCanResume) {
+			// Legacy interactive resume (e.g. picker) for profiles without a Tier1 strategy.
+			coreArgs = [...base, ...profile.resumeArgs];
+		} else {
+			coreArgs = [...base];
+		}
+
+		const args = [...coreArgs, ...additionalArgs];
 
 		// GUI-launched Obsidian inherits launchd's minimal PATH and never loads
 		// the user's shell rc files (.zprofile/.zshrc/.bashrc). When the user
@@ -253,6 +304,8 @@ export class SessionManager {
 
 	isResumeSupportedForConfig(launchConfig: TabLaunchConfig): boolean {
 		const profile = this.resolveCliProfile(launchConfig.cliId);
+		const strategy = this.resolveResumeStrategy(profile);
+		if (strategy === 'assign-id' || strategy === 'continue-latest') return true;
 		return profile.supportsResume && profile.resumeArgs.length > 0;
 	}
 
@@ -262,7 +315,8 @@ export class SessionManager {
 		onExit: (exitCode: number) => void,
 		startMode: StartMode = 'new',
 		launchConfig?: Partial<TabLaunchConfig>,
-		cwd?: string
+		cwd?: string,
+		resumeKey?: string
 	): Session {
 		const resolvedLaunchConfig = this.resolveLaunchConfig(launchConfig);
 		// Phase 1 (Tier0): launch in the persisted/requested cwd, defaulting to the vault.
@@ -271,7 +325,8 @@ export class SessionManager {
 		const launchCommand = this.buildLaunchCommand(
 			profile,
 			startMode,
-			resolvedLaunchConfig.additionalArgs
+			resolvedLaunchConfig.additionalArgs,
+			resumeKey
 		);
 
 		const commandPath = launchCommand.executablePath;

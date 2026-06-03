@@ -8,6 +8,15 @@ export type SessionStatus = 'running' | 'exited' | 'error';
 
 export type StartMode = 'new' | 'continue';
 
+/**
+ * Tier1 logical-resume strategy for a CLI profile (Phase 2).
+ * - 'assign-id': assign a deterministic --session-id on launch, resume it by id (Claude).
+ * - 'continue-latest': resume the most recent session scoped to the cwd (Codex).
+ * - 'none': no automatic resume (plain shells / unknown CLIs).
+ * Optional + inferred from the executable when unset, so existing profiles keep working.
+ */
+export type ResumeStrategy = 'assign-id' | 'continue-latest' | 'none';
+
 export interface CliProfile {
 	id: string;
 	displayName: string;
@@ -15,6 +24,7 @@ export interface CliProfile {
 	defaultArgs: string[];
 	supportsResume: boolean;
 	resumeArgs: string[];
+	resumeStrategy?: ResumeStrategy;
 }
 
 export interface TabLaunchConfig {

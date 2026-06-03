@@ -20,14 +20,17 @@ export interface PersistedSessionState {
 	cliId: string;
 	cwd: string;
 	additionalArgs: string[];
+	/** Tier1 resume key (e.g. Claude's --session-id uuid). Absent for strategies that don't need one. */
+	resumeKey?: string;
 }
 
 /** Build a serializable persisted-state object from the live launch config + cwd. */
 export function buildPersistedSessionState(
 	launchConfig: Pick<TabLaunchConfig, 'cliId' | 'additionalArgs'>,
-	cwd: string
+	cwd: string,
+	resumeKey?: string
 ): PersistedSessionState {
-	return {
+	const state: PersistedSessionState = {
 		v: PERSISTED_SESSION_STATE_VERSION,
 		cliId: launchConfig.cliId,
 		cwd,
@@ -35,6 +38,10 @@ export function buildPersistedSessionState(
 			? launchConfig.additionalArgs.filter((a): a is string => typeof a === 'string')
 			: []
 	};
+	if (typeof resumeKey === 'string' && resumeKey.trim()) {
+		state.resumeKey = resumeKey.trim();
+	}
+	return state;
 }
 
 /**
@@ -59,5 +66,9 @@ export function parsePersistedSessionState(raw: unknown): PersistedSessionState 
 		? obj.additionalArgs.filter((a): a is string => typeof a === 'string')
 		: [];
 
-	return { v: PERSISTED_SESSION_STATE_VERSION, cliId, cwd, additionalArgs };
+	const result: PersistedSessionState = { v: PERSISTED_SESSION_STATE_VERSION, cliId, cwd, additionalArgs };
+	if (typeof obj.resumeKey === 'string' && obj.resumeKey.trim()) {
+		result.resumeKey = obj.resumeKey.trim();
+	}
+	return result;
 }

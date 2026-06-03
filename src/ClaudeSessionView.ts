@@ -52,6 +52,8 @@ export class ClaudeSessionView extends ItemView {
 	private restoredCwd: string | null = null;
 	// The cwd this tab launches sessions in; reused across in-place restarts.
 	private launchCwd: string | null = null;
+	// Tier1 resume key (Phase 2): Claude's --session-id. Persisted, reused to --resume on restore.
+	private resumeKey: string | null = null;
 	// Launch config captured from a pending new-tab open (consumed synchronously in onOpen).
 	private pendingLaunchConfigCaptured: Partial<TabLaunchConfig> | null = null;
 	private osc52Disposer: { dispose: () => void } | null = null;
@@ -94,7 +96,7 @@ export class ClaudeSessionView extends ItemView {
 			initialLaunchConfig: { cliId, additionalArgs }
 		};
 		if (cwd) {
-			Object.assign(state, buildPersistedSessionState({ cliId, additionalArgs }, cwd));
+			Object.assign(state, buildPersistedSessionState({ cliId, additionalArgs }, cwd, this.resumeKey ?? undefined));
 		}
 		return state;
 	}
@@ -108,6 +110,7 @@ export class ClaudeSessionView extends ItemView {
 				additionalArgs: persisted.additionalArgs
 			};
 			this.restoredCwd = persisted.cwd;
+			this.resumeKey = persisted.resumeKey ?? null;
 		} else {
 			const launchConfig = stateObj?.initialLaunchConfig;
 			if (launchConfig && typeof launchConfig === 'object') {
@@ -123,7 +126,8 @@ export class ClaudeSessionView extends ItemView {
 		if (this.isDebugEnabled()) {
 			console.debug(
 				'[TerminalAgentTabs] setState: restoredCwd=', this.restoredCwd,
-				'cliId=', this.initialLaunchConfigFromState?.cliId
+				'cliId=', this.initialLaunchConfigFromState?.cliId,
+				'resumeKey=', this.resumeKey
 			);
 		}
 		await super.setState(state, result);
@@ -273,11 +277,32 @@ export class ClaudeSessionView extends ItemView {
 		this.tabLaunchConfig = this.resolveTabLaunchConfig();
 		this.launchCwd = this.restoredCwd;
 		this.updateDefaultHeaderFromConfig();
-		this.startSession('new', { cwd: this.launchCwd ?? undefined });
+
+		// Tier1 (Phase 2): a restored tab resumes its prior conversation when possible.
+		const isRestore = this.restoredCwd != null || this.resumeKey != null;
+		const startMode: StartMode = isRestore && this.canResumeRestoredSession() ? 'continue' : 'new';
+
+		this.startSession(startMode, { cwd: this.launchCwd ?? undefined });
 		// Focus terminal after session starts so user can type immediately
 		if (this.terminal) {
 			this.terminal.focus();
 		}
+	}
+
+	/** Whether the restored persisted state is enough to resume (vs. start fresh). */
+	private canResumeRestoredSession(): boolean {
+		const config = this.tabLaunchConfig;
+		if (!config) return false;
+		const strategy = this.plugin.sessionManager.getResumeStrategy(config);
+		if (strategy === 'assign-id') {
+			return !!this.resumeKey
+				&& this.plugin.sessionManager.claudeTranscriptExists(this.launchCwd ?? '', this.resumeKey);
+		}
+		if (strategy === 'continue-latest') {
+			// Codex resumes the most recent session scoped to this cwd (best-effort).
+			return !!this.launchCwd;
+		}
+		return false;
 	}
 
 	async onClose(): Promise<void> {
@@ -651,10 +676,20 @@ export class ClaudeSessionView extends ItemView {
 		const { parseOsc = true, showNewSessionOptionOnError = false, cwd } = options || {};
 		const launchConfig = this.tabLaunchConfig || this.plugin.sessionManager.getDefaultLaunchConfig();
 		const canResume = this.plugin.sessionManager.isResumeSupportedForConfig(launchConfig);
-		const effectiveStartMode = startMode === 'continue' && !canResume ? 'new' : startMode;
+		const strategy = this.plugin.sessionManager.getResumeStrategy(launchConfig);
+		let effectiveStartMode: StartMode = startMode === 'continue' && !canResume ? 'new' : startMode;
+		// Tier1 assign-id needs a key to resume by id; without one, start a fresh conversation.
+		if (strategy === 'assign-id' && effectiveStartMode === 'continue' && !this.resumeKey) {
+			effectiveStartMode = 'new';
+		}
 
 		if (startMode === 'continue' && effectiveStartMode === 'new') {
 			new Notice('Resume is not configured for this CLI profile. Starting a new session.');
+		}
+
+		// Tier1 assign-id: a new launch gets a fresh, persistable session id (Claude --session-id).
+		if (strategy === 'assign-id' && effectiveStartMode === 'new') {
+			this.resumeKey = crypto.randomUUID();
 		}
 
 		try {
@@ -682,7 +717,8 @@ export class ClaudeSessionView extends ItemView {
 				},
 				effectiveStartMode,
 				launchConfig,
-				cwd
+				cwd,
+				this.resumeKey ?? undefined
 			);
 
 			this.plugin.sessionManager.updateSessionTerminal(this.sessionId, this.terminal, this.fitAddon);

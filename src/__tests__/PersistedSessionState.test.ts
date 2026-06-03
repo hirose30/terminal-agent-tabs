@@ -32,6 +32,17 @@ describe('PersistedSessionState', () => {
 			const built = buildPersistedSessionState({ cliId: 'codex', additionalArgs: [] }, '/tmp/x');
 			expect(parsePersistedSessionState(built)).toEqual(built);
 		});
+
+		it('includes resumeKey when provided', () => {
+			const built = buildPersistedSessionState({ cliId: 'claude', additionalArgs: [] }, '/c', 'uuid-123');
+			expect(built.resumeKey).toBe('uuid-123');
+			expect(parsePersistedSessionState(built)).toEqual(built);
+		});
+
+		it('omits resumeKey when blank or absent', () => {
+			expect(buildPersistedSessionState({ cliId: 'claude', additionalArgs: [] }, '/c', '   ').resumeKey).toBeUndefined();
+			expect(buildPersistedSessionState({ cliId: 'claude', additionalArgs: [] }, '/c').resumeKey).toBeUndefined();
+		});
 	});
 
 	describe('parsePersistedSessionState()', () => {
@@ -63,6 +74,17 @@ describe('PersistedSessionState', () => {
 		it('defaults additionalArgs to [] when not an array', () => {
 			const parsed = parsePersistedSessionState({ ...valid, additionalArgs: 'nope' });
 			expect(parsed?.additionalArgs).toEqual([]);
+		});
+
+		it('parses resumeKey when present and trims it', () => {
+			const parsed = parsePersistedSessionState({ ...valid, resumeKey: '  abc-1  ' });
+			expect(parsed?.resumeKey).toBe('abc-1');
+		});
+
+		it('omits resumeKey when blank or non-string', () => {
+			expect(parsePersistedSessionState({ ...valid, resumeKey: '   ' })?.resumeKey).toBeUndefined();
+			expect(parsePersistedSessionState({ ...valid, resumeKey: 42 })?.resumeKey).toBeUndefined();
+			expect(parsePersistedSessionState(valid)?.resumeKey).toBeUndefined();
 		});
 
 		// Graceful degradation → null (callers fall back to a new session in the vault dir)
