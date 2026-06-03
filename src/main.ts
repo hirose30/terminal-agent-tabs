@@ -58,6 +58,8 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 
 		this.sessionManager = new SessionManager(this);
 		ensureEmbeddedResources(this.sessionManager.getPluginDir());
+		// Phase 4: drop scrollback files from tabs closed long ago (recent ones survive for restore).
+		this.sessionManager.pruneScrollback(14 * 24 * 60 * 60 * 1000);
 		this.notificationStore = new NotificationStore();
 		this.outputMonitor = new OutputMonitor();
 		this.dockBadge = new DockBadge();

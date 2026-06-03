@@ -18,6 +18,9 @@ import type {
 
 export const SPECIAL_CLI_ID_DEFAULT_SHELL = '__default_shell__';
 
+/** Phase 4: cap persisted scrollback to keep plugin-dir files small. */
+const SCROLLBACK_MAX_CHARS = 400_000;
+
 export type SessionChangeCallback = () => void;
 
 /**
@@ -47,6 +50,57 @@ export class SessionManager {
 
 	getPluginDir(): string {
 		return this.pluginDir;
+	}
+
+	private scrollbackDir(): string {
+		return path.join(this.pluginDir, 'scrollback');
+	}
+
+	/** Phase 4: persist a tab's serialized terminal buffer (keyed by a stable per-tab id). Best-effort. */
+	saveScrollback(key: string, content: string): void {
+		if (!key || !content) return;
+		try {
+			const dir = this.scrollbackDir();
+			fs.mkdirSync(dir, { recursive: true });
+			// Keep the tail when over the cap — the most recent screen matters most.
+			const capped = content.length > SCROLLBACK_MAX_CHARS
+				? content.slice(content.length - SCROLLBACK_MAX_CHARS)
+				: content;
+			fs.writeFileSync(path.join(dir, `${key}.txt`), capped, { mode: 0o600 });
+		} catch (e) {
+			console.debug('[TerminalAgentTabs] Failed to save scrollback:', e);
+		}
+	}
+
+	/** Load a tab's persisted scrollback for repaint, or null if none. */
+	loadScrollback(key: string): string | null {
+		if (!key) return null;
+		try {
+			const file = path.join(this.scrollbackDir(), `${key}.txt`);
+			if (!fs.existsSync(file)) return null;
+			return fs.readFileSync(file, 'utf8');
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Prune scrollback files older than maxAgeMs (orphans from closed tabs). Recently
+	 * saved files (e.g. from the last quit) keep a fresh mtime and survive for restore.
+	 */
+	pruneScrollback(maxAgeMs: number): void {
+		try {
+			const dir = this.scrollbackDir();
+			if (!fs.existsSync(dir)) return;
+			const now = Date.now();
+			for (const name of fs.readdirSync(dir)) {
+				if (!name.endsWith('.txt')) continue;
+				const file = path.join(dir, name);
+				try {
+					if (now - fs.statSync(file).mtimeMs > maxAgeMs) fs.unlinkSync(file);
+				} catch { /* ignore individual file errors */ }
+			}
+		} catch { /* ignore */ }
 	}
 
 	private getPtyHelperPath(): string {

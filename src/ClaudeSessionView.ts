@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { SerializeAddon } from '@xterm/addon-serialize';
 import type ClaudeCodeTabsPlugin from './main';
 import type { StartMode, TabLaunchConfig } from './types';
 import { OscParser } from './OscParser';
@@ -38,6 +39,9 @@ export class ClaudeSessionView extends ItemView {
 	sessionId: string;
 	terminal: Terminal | null = null;
 	fitAddon: FitAddon | null = null;
+	// Phase 4: scrollback serialization for repaint on restore.
+	private serializeAddon: SerializeAddon | null = null;
+	private scrollbackDirty: boolean = false;
 	headerText: string = 'Coding Session';
 	private terminalContainer: HTMLElement | null = null;
 	private statusContainer: HTMLElement | null = null;
@@ -218,6 +222,7 @@ export class ClaudeSessionView extends ItemView {
 		this.terminal.open(this.terminalContainer);
 		this.registerOsc52ClipboardSync();
 		this.loadWebglRenderer();
+		this.loadSerializeAddon();
 
 		this.fitAddon.fit();
 
@@ -256,10 +261,41 @@ export class ClaudeSessionView extends ItemView {
 
 		this.updateDefaultHeaderFromConfig();
 
+		// Phase 4: periodically persist the scrollback (debounced via a dirty flag) so a
+		// crash/quit still leaves a recent screen to repaint.
+		this.registerInterval(window.setInterval(() => this.autosaveScrollback(), 5000));
+
 		// Defer session start until the workspace layout is ready. On restore this
 		// guarantees setState() has already delivered the persisted cwd; for a new tab
 		// the layout is already ready, so this runs immediately.
 		this.app.workspace.onLayoutReady(() => this.startInitialSession());
+	}
+
+	private loadSerializeAddon(): void {
+		if (!this.terminal) return;
+		try {
+			this.serializeAddon = new SerializeAddon();
+			this.terminal.loadAddon(this.serializeAddon);
+		} catch (e) {
+			console.debug('[TerminalAgentTabs] Serialize addon not available:', e);
+		}
+	}
+
+	private autosaveScrollback(): void {
+		if (this.scrollbackDirty) this.saveScrollbackNow();
+	}
+
+	private saveScrollbackNow(): void {
+		if (!this.terminal || !this.serializeAddon || !this.resumeKey) return;
+		try {
+			const content = this.serializeAddon.serialize({ scrollback: 4000 });
+			this.plugin.sessionManager.saveScrollback(this.resumeKey, content);
+			this.scrollbackDirty = false;
+		} catch (e) {
+			if (this.debugEnabled) {
+				console.debug('[TerminalAgentTabs] scrollback serialize failed:', e);
+			}
+		}
 	}
 
 	private resolveTabLaunchConfig(): TabLaunchConfig {
@@ -285,6 +321,14 @@ export class ClaudeSessionView extends ItemView {
 		const isRestore = this.restoredCwd != null || this.resumeKey != null;
 		const startMode: StartMode = isRestore && this.canResumeRestoredSession() ? 'continue' : 'new';
 
+		// Phase 4: repaint the last screen before the (re)started session takes over.
+		if (isRestore && this.resumeKey && this.terminal) {
+			const scrollback = this.plugin.sessionManager.loadScrollback(this.resumeKey);
+			if (scrollback) {
+				this.terminal.write(scrollback);
+			}
+		}
+
 		this.startSession(startMode, { cwd: this.launchCwd ?? undefined });
 		// Focus terminal after session starts so user can type immediately
 		if (this.terminal) {
@@ -309,6 +353,9 @@ export class ClaudeSessionView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		// Phase 4: capture the final screen while the terminal is still alive (also covers quit).
+		this.saveScrollbackNow();
+
 		if (this.unsubscribeNotifications) {
 			this.unsubscribeNotifications();
 			this.unsubscribeNotifications = null;
@@ -692,8 +739,9 @@ export class ClaudeSessionView extends ItemView {
 			new Notice('Resume is not configured for this CLI profile. Starting a new session.');
 		}
 
-		// Tier1 assign-id: a new launch gets a fresh, persistable session id (Claude --session-id).
-		if (strategy === 'assign-id' && effectiveStartMode === 'new') {
+		// A new launch gets a fresh per-tab id, persisted for restore. Used as Claude's
+		// --session-id (assign-id strategy) and as the scrollback key (all profiles).
+		if (effectiveStartMode === 'new') {
 			this.resumeKey = crypto.randomUUID();
 		}
 
@@ -713,6 +761,7 @@ export class ClaudeSessionView extends ItemView {
 							}
 						}
 						this.terminal.write(data);
+						this.scrollbackDirty = true;
 						// Feed output monitor for pattern detection and last-line tracking
 						this.plugin.outputMonitor.feed(this.sessionId, data);
 						const lastLine = this.plugin.outputMonitor.getLastLine(this.sessionId);
