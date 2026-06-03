@@ -15,6 +15,7 @@ import type {
 	CliProfile,
 	ResumeStrategy
 } from './types';
+import { isSafeResumeKey } from './PersistedSessionState';
 
 export const SPECIAL_CLI_ID_DEFAULT_SHELL = '__default_shell__';
 
@@ -67,14 +68,28 @@ export class SessionManager {
 		try {
 			const dir = this.shellIntegrationDir();
 			fs.mkdirSync(dir, { recursive: true });
-			const realZdot = '${TAT_REAL_ZDOTDIR:-$HOME}';
-			const chain = (file: string) => `[ -f "${realZdot}/${file}" ] && source "${realZdot}/${file}"\n`;
+			// CRITICAL: source the user's real rc with ZDOTDIR pointed at THEIR dir, so frameworks
+			// that read $ZDOTDIR (zimfw uses $ZDOTDIR/.zim, prezto, etc.) locate their data
+			// correctly. Only point ZDOTDIR back here to load the *next* integration file.
+			const real = '${TAT_REAL_ZDOTDIR:-$HOME}';
+			const chain = (file: string) => [
+				'_tat_mine="$ZDOTDIR"',
+				`export ZDOTDIR="${real}"`,
+				`[ -f "$ZDOTDIR/${file}" ] && source "$ZDOTDIR/${file}"`,
+				// capture any ZDOTDIR the user's rc set, then return to the integration dir.
+				'export TAT_REAL_ZDOTDIR="$ZDOTDIR"',
+				'ZDOTDIR="$_tat_mine"',
+				'unset _tat_mine',
+				''
+			].join('\n');
 			fs.writeFileSync(path.join(dir, '.zshenv'), chain('.zshenv'), { mode: 0o600 });
 			fs.writeFileSync(path.join(dir, '.zprofile'), chain('.zprofile'), { mode: 0o600 });
 			const zshrc = [
-				chain('.zshrc').trimEnd(),
-				'# Terminal Agent Tabs: restore ZDOTDIR for subshells so they are not re-injected.',
-				`export ZDOTDIR="${realZdot}"`,
+				// .zshrc is the last interactive init file: keep ZDOTDIR at the real dir while
+				// sourcing AND afterwards, so the user's framework + subshells + .zlogin use their
+				// own config dir (and are never re-injected).
+				`export ZDOTDIR="${real}"`,
+				`[ -f "$ZDOTDIR/.zshrc" ] && source "$ZDOTDIR/.zshrc"`,
 				'# Report the live working directory via OSC 7 for session persistence.',
 				`_tat_osc7_cwd() { printf '\\033]7;file://%s%s\\007' "\${HOST}" "\${PWD}"; }`,
 				'autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook precmd _tat_osc7_cwd || precmd_functions+=(_tat_osc7_cwd)',
@@ -92,7 +107,7 @@ export class SessionManager {
 
 	/** Phase 4: persist a tab's serialized terminal buffer (keyed by a stable per-tab id). Best-effort. */
 	saveScrollback(key: string, content: string): void {
-		if (!key || !content) return;
+		if (!isSafeResumeKey(key) || !content) return;
 		try {
 			const dir = this.scrollbackDir();
 			fs.mkdirSync(dir, { recursive: true });
@@ -108,7 +123,7 @@ export class SessionManager {
 
 	/** Load a tab's persisted scrollback for repaint, or null if none. */
 	loadScrollback(key: string): string | null {
-		if (!key) return null;
+		if (!isSafeResumeKey(key)) return null;
 		try {
 			const file = path.join(this.scrollbackDir(), `${key}.txt`);
 			if (!fs.existsSync(file)) return null;

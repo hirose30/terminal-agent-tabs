@@ -15,6 +15,14 @@ import type { TabLaunchConfig } from './types';
 
 export const PERSISTED_SESSION_STATE_VERSION = 1;
 
+/**
+ * A resumeKey is used both as a CLI session id and as a scrollback filename, so it must be a
+ * strict filename-safe token (our generated values are UUIDs). Rejects path-traversal / unsafe text.
+ */
+export function isSafeResumeKey(value: unknown): value is string {
+	return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+}
+
 export interface PersistedSessionState {
 	v: typeof PERSISTED_SESSION_STATE_VERSION;
 	cliId: string;
@@ -38,8 +46,9 @@ export function buildPersistedSessionState(
 			? launchConfig.additionalArgs.filter((a): a is string => typeof a === 'string')
 			: []
 	};
-	if (typeof resumeKey === 'string' && resumeKey.trim()) {
-		state.resumeKey = resumeKey.trim();
+	const trimmedKey = resumeKey?.trim();
+	if (isSafeResumeKey(trimmedKey)) {
+		state.resumeKey = trimmedKey;
 	}
 	return state;
 }
@@ -67,8 +76,9 @@ export function parsePersistedSessionState(raw: unknown): PersistedSessionState 
 		: [];
 
 	const result: PersistedSessionState = { v: PERSISTED_SESSION_STATE_VERSION, cliId, cwd, additionalArgs };
-	if (typeof obj.resumeKey === 'string' && obj.resumeKey.trim()) {
-		result.resumeKey = obj.resumeKey.trim();
+	const rk = typeof obj.resumeKey === 'string' ? obj.resumeKey.trim() : '';
+	if (isSafeResumeKey(rk)) {
+		result.resumeKey = rk;
 	}
 	return result;
 }

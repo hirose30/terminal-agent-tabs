@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
 	PERSISTED_SESSION_STATE_VERSION,
 	buildPersistedSessionState,
-	parsePersistedSessionState
+	parsePersistedSessionState,
+	isSafeResumeKey
 } from '../PersistedSessionState';
 
 describe('PersistedSessionState', () => {
@@ -87,6 +88,12 @@ describe('PersistedSessionState', () => {
 			expect(parsePersistedSessionState(valid)?.resumeKey).toBeUndefined();
 		});
 
+		it('rejects an unsafe (path-traversal) resumeKey', () => {
+			expect(parsePersistedSessionState({ ...valid, resumeKey: '../../etc/passwd' })?.resumeKey).toBeUndefined();
+			expect(parsePersistedSessionState({ ...valid, resumeKey: 'a/b' })?.resumeKey).toBeUndefined();
+			expect(parsePersistedSessionState({ ...valid, resumeKey: 'a.txt' })?.resumeKey).toBeUndefined();
+		});
+
 		// Graceful degradation → null (callers fall back to a new session in the vault dir)
 		it.each([
 			['null', null],
@@ -107,6 +114,21 @@ describe('PersistedSessionState', () => {
 			['non-string cliId', { ...valid, cliId: 5 }]
 		])('returns null for %s', (_label, input) => {
 			expect(parsePersistedSessionState(input)).toBeNull();
+		});
+	});
+
+	describe('isSafeResumeKey', () => {
+		it('accepts uuids and safe tokens', () => {
+			expect(isSafeResumeKey('70be7d2a-1b13-4864-a4d6-1dae2b1c562e')).toBe(true);
+			expect(isSafeResumeKey('abc_123-XYZ')).toBe(true);
+		});
+		it('rejects traversal, slashes, dots, empty, and over-long', () => {
+			expect(isSafeResumeKey('../evil')).toBe(false);
+			expect(isSafeResumeKey('a/b')).toBe(false);
+			expect(isSafeResumeKey('a.b')).toBe(false);
+			expect(isSafeResumeKey('')).toBe(false);
+			expect(isSafeResumeKey(42)).toBe(false);
+			expect(isSafeResumeKey('x'.repeat(129))).toBe(false);
 		});
 	});
 });
