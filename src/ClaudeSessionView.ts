@@ -266,9 +266,11 @@ export class ClaudeSessionView extends ItemView {
 		// crash/quit still leaves a recent screen to repaint.
 		this.registerInterval(window.setInterval(() => this.autosaveScrollback(), 5000));
 
-		// Defer session start until the workspace layout is ready. On restore this
-		// guarantees setState() has already delivered the persisted cwd; for a new tab
-		// the layout is already ready, so this runs immediately.
+		// Defer session start until the workspace layout is ready. Workspace restore happens
+		// at startup while layout is NOT yet ready, so onOpen -> setState (persisted cwd/
+		// resumeKey) -> layout-ready -> this callback: the restored state is in place before we
+		// start. A tab created after layout is already ready (a fresh user-opened tab) has no
+		// persisted state and onLayoutReady runs immediately — correctly starting a new session.
 		this.app.workspace.onLayoutReady(() => this.startInitialSession());
 	}
 

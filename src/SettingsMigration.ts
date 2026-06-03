@@ -3,7 +3,7 @@
  * Handles conversion from old settings shapes (pre-v0.3) to current CliProfile format.
  */
 
-import type { CliProfile } from './types';
+import type { CliProfile, ResumeStrategy } from './types';
 import { normalizeCliId } from './utils';
 
 export interface LegacySettingsShape {
@@ -60,6 +60,11 @@ function parseStringArray(arr: unknown): string[] {
 	return arr.filter((v): v is string => typeof v === 'string').map((v) => v.trim()).filter(Boolean);
 }
 
+/** Preserve an explicit, valid resumeStrategy across migration (optional/backward-compatible). */
+function parseResumeStrategy(value: unknown): ResumeStrategy | undefined {
+	return value === 'assign-id' || value === 'continue-latest' || value === 'none' ? value : undefined;
+}
+
 function migrateFromArray(raw: unknown[], loaded: LegacySettingsShape): CliProfile[] | null {
 	const normalized = raw
 		.map((entry, index): CliProfile | null => {
@@ -75,13 +80,15 @@ function migrateFromArray(raw: unknown[], loaded: LegacySettingsShape): CliProfi
 				typeof obj.executablePath === 'string' && obj.executablePath.trim()
 					? obj.executablePath.trim()
 					: id;
+			const resumeStrategy = parseResumeStrategy(obj.resumeStrategy);
 			return {
 				id,
 				displayName: displayName || id,
 				executablePath,
 				defaultArgs: parseStringArray(obj.defaultArgs),
 				supportsResume: Boolean(obj.supportsResume),
-				resumeArgs: parseStringArray(obj.resumeArgs)
+				resumeArgs: parseStringArray(obj.resumeArgs),
+				...(resumeStrategy ? { resumeStrategy } : {})
 			};
 		})
 		.filter((v): v is CliProfile => !!v);
@@ -134,7 +141,8 @@ function migrateFromObject(raw: Record<string, unknown>, loaded: LegacySettingsS
 			executablePath,
 			defaultArgs: parseStringArray(profile.defaultArgs),
 			supportsResume: Boolean(profile.supportsResume),
-			resumeArgs: parseStringArray(profile.resumeArgs)
+			resumeArgs: parseStringArray(profile.resumeArgs),
+			...(parseResumeStrategy(profile.resumeStrategy) ? { resumeStrategy: parseResumeStrategy(profile.resumeStrategy) } : {})
 		});
 	}
 	if (converted.length > 0) {

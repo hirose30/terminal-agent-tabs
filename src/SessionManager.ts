@@ -273,8 +273,9 @@ export class SessionManager {
 				? [...base, '--resume', resumeKey]
 				: [...base, '--session-id', resumeKey];
 		} else if (strategy === 'continue-latest' && startMode === 'continue') {
-			// Tier1 (Codex): resume the most recent session scoped to the cwd. Subcommand goes first.
-			coreArgs = ['resume', '--last', ...base];
+			// Tier1 (Codex): resume the most recent session scoped to the cwd. Global/default
+			// args must precede the `resume` subcommand (hookArgs is empty for codex).
+			coreArgs = [...base, 'resume', '--last'];
 		} else if (startMode === 'continue' && legacyCanResume) {
 			// Legacy interactive resume (e.g. picker) for profiles without a Tier1 strategy.
 			coreArgs = [...base, ...profile.resumeArgs];
@@ -374,7 +375,15 @@ export class SessionManager {
 	): Session {
 		const resolvedLaunchConfig = this.resolveLaunchConfig(launchConfig);
 		// Phase 1 (Tier0): launch in the persisted/requested cwd, defaulting to the vault.
-		const launchCwd = typeof cwd === 'string' && cwd.trim() ? cwd.trim() : this.vaultPath;
+		// Graceful: if the persisted cwd no longer exists, fall back to the vault so spawn
+		// can't throw on a stale/deleted directory.
+		const requestedCwd = typeof cwd === 'string' && cwd.trim() ? cwd.trim() : this.vaultPath;
+		let launchCwd = requestedCwd;
+		try {
+			if (!fs.existsSync(requestedCwd)) launchCwd = this.vaultPath;
+		} catch {
+			launchCwd = this.vaultPath;
+		}
 		const profile = this.resolveCliProfile(resolvedLaunchConfig.cliId);
 		const launchCommand = this.buildLaunchCommand(
 			profile,
