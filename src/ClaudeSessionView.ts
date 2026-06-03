@@ -52,6 +52,8 @@ export class ClaudeSessionView extends ItemView {
 	private restoredCwd: string | null = null;
 	// The cwd this tab launches sessions in; reused across in-place restarts.
 	private launchCwd: string | null = null;
+	// Live cwd reported by the shell via OSC 7 (Phase 3). Overrides launchCwd for persistence.
+	private liveCwd: string | null = null;
 	// Tier1 resume key (Phase 2): Claude's --session-id. Persisted, reused to --resume on restore.
 	private resumeKey: string | null = null;
 	// Launch config captured from a pending new-tab open (consumed synchronously in onOpen).
@@ -90,7 +92,8 @@ export class ClaudeSessionView extends ItemView {
 		if (!cliId) return base;
 		const additionalArgs = this.tabLaunchConfig?.additionalArgs ?? [];
 		const session = this.plugin.sessionManager.getSession(this.sessionId);
-		const cwd = session?.launchCwd ?? this.launchCwd ?? this.restoredCwd ?? null;
+		// Phase 3: a live cwd (OSC 7) wins over the launch cwd so restore returns to where the user is.
+		const cwd = this.liveCwd ?? session?.launchCwd ?? this.launchCwd ?? this.restoredCwd ?? null;
 		const state: Record<string, unknown> = {
 			...base,
 			initialLaunchConfig: { cliId, additionalArgs }
@@ -465,6 +468,8 @@ export class ClaudeSessionView extends ItemView {
 	private restartSession(startMode: StartMode = 'new'): void {
 		this.isExited = false;
 		this.oscParser.reset();
+		// The new session will re-report its cwd via OSC 7; drop the stale value.
+		this.liveCwd = null;
 
 		if (this.statusContainer) {
 			this.statusContainer.addClass('is-hidden');
@@ -701,6 +706,10 @@ export class ClaudeSessionView extends ItemView {
 							const result = this.oscParser.parse(data);
 							if (result.title) {
 								this.updateHeaderText(result.title);
+							}
+							if (result.cwd) {
+								// Phase 3: track the shell's live cwd so restore returns to it.
+								this.liveCwd = result.cwd;
 							}
 						}
 						this.terminal.write(data);
