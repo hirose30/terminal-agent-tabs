@@ -46,10 +46,44 @@ export class SessionManager {
 		const adapter = this.plugin.app.vault.adapter;
 		this.vaultPath = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : '';
 		this.pluginDir = this.resolvePluginDir();
+		this.writeShellIntegration();
 	}
 
 	getPluginDir(): string {
 		return this.pluginDir;
+	}
+
+	private shellIntegrationDir(): string {
+		return path.join(this.pluginDir, 'shell-integration');
+	}
+
+	/**
+	 * Phase 3 enabler: a self-contained ZDOTDIR whose rc files source the user's real zsh
+	 * config (via $TAT_REAL_ZDOTDIR, falling back to $HOME so config always loads) and then add
+	 * an OSC 7 precmd so the shell reports its live cwd. Activated by setting ZDOTDIR to this dir
+	 * (see getSpawnEnv). Written idempotently on load; harmless when ZDOTDIR isn't pointed here.
+	 */
+	private writeShellIntegration(): void {
+		try {
+			const dir = this.shellIntegrationDir();
+			fs.mkdirSync(dir, { recursive: true });
+			const realZdot = '${TAT_REAL_ZDOTDIR:-$HOME}';
+			const chain = (file: string) => `[ -f "${realZdot}/${file}" ] && source "${realZdot}/${file}"\n`;
+			fs.writeFileSync(path.join(dir, '.zshenv'), chain('.zshenv'), { mode: 0o600 });
+			fs.writeFileSync(path.join(dir, '.zprofile'), chain('.zprofile'), { mode: 0o600 });
+			const zshrc = [
+				chain('.zshrc').trimEnd(),
+				'# Terminal Agent Tabs: restore ZDOTDIR for subshells so they are not re-injected.',
+				`export ZDOTDIR="${realZdot}"`,
+				'# Report the live working directory via OSC 7 for session persistence.',
+				`_tat_osc7_cwd() { printf '\\033]7;file://%s%s\\007' "\${HOST}" "\${PWD}"; }`,
+				'autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook precmd _tat_osc7_cwd || precmd_functions+=(_tat_osc7_cwd)',
+				''
+			].join('\n');
+			fs.writeFileSync(path.join(dir, '.zshrc'), zshrc, { mode: 0o600 });
+		} catch (e) {
+			console.debug('[TerminalAgentTabs] Failed to write shell integration:', e);
+		}
 	}
 
 	private scrollbackDir(): string {
@@ -137,12 +171,21 @@ export class SessionManager {
 
 	private getSpawnEnv(): NodeJS.ProcessEnv {
 		const envPath = process.env.PATH || '';
-		return {
+		const env: NodeJS.ProcessEnv = {
 			...process.env,
 			PATH: this.buildPathEnv(envPath),
 			TERM: 'xterm-256color',
 			CLICOLOR: this.isDebugEnabled() ? '0' : process.env.CLICOLOR
 		};
+		// Phase 3: point zsh at the integration ZDOTDIR so it reports cwd via OSC 7.
+		// Only for zsh (other shells ignore ZDOTDIR); the integration sources the user's
+		// real config so this never breaks their shell, just adds cwd reporting.
+		const shell = process.env.SHELL || '';
+		if (this.plugin.settings.enableShellCwdTracking && shell.endsWith('zsh')) {
+			env.TAT_REAL_ZDOTDIR = process.env.ZDOTDIR || os.homedir();
+			env.ZDOTDIR = this.shellIntegrationDir();
+		}
+		return env;
 	}
 
 	/** Register a listener for session state changes. Returns an unsubscribe function. */

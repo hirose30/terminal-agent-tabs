@@ -58,6 +58,8 @@ export interface ClaudeCodeTabsSettings {
 	terminalFontFamily: string;
 	terminalCustomGlyphs: boolean;
 	enableOsc52ClipboardSync: boolean;
+	/** Inject OSC 7 cwd reporting into spawned zsh shells so restore tracks the live directory. */
+	enableShellCwdTracking: boolean;
 	enableHookNotifications: boolean;
 	enableHookNotificationSound: boolean;
 	hookEventsFilePath: string;
@@ -89,6 +91,7 @@ export const DEFAULT_SETTINGS: ClaudeCodeTabsSettings = {
 	terminalFontFamily: DEFAULT_TERMINAL_FONT_FAMILY,
 	terminalCustomGlyphs: true,
 	enableOsc52ClipboardSync: true,
+	enableShellCwdTracking: true,
 	enableHookNotifications: false,
 	enableHookNotificationSound: false,
 	hookEventsFilePath: '',

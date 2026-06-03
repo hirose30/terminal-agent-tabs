@@ -262,6 +262,8 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 			terminalCustomGlyphs: sanitizeTerminalCustomGlyphs(loaded.terminalCustomGlyphs),
 			enableOsc52ClipboardSync:
 				loaded.enableOsc52ClipboardSync ?? DEFAULT_SETTINGS.enableOsc52ClipboardSync,
+			enableShellCwdTracking:
+				loaded.enableShellCwdTracking ?? DEFAULT_SETTINGS.enableShellCwdTracking,
 			enableHookNotifications:
 				loaded.enableHookNotifications ?? DEFAULT_SETTINGS.enableHookNotifications,
 			enableHookNotificationSound:

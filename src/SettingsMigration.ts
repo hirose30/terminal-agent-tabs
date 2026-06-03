@@ -15,6 +15,7 @@ export interface LegacySettingsShape {
 	terminalFontFamily?: string;
 	terminalCustomGlyphs?: boolean;
 	enableOsc52ClipboardSync?: boolean;
+	enableShellCwdTracking?: boolean;
 	enableHookNotifications?: boolean;
 	enableHookNotificationSound?: boolean;
 	hookEventsFilePath?: string;

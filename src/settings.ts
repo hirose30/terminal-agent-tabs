@@ -255,6 +255,16 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
+		new Setting(containerEl)
+			.setName('Track shell directory')
+			.setDesc('Report the shell\'s current directory so a restored tab reopens there. Applies to zsh; takes effect on the next session start.')
+			.addToggle((toggle) => toggle
+				.setValue(this.plugin.settings.enableShellCwdTracking)
+				.onChange(async (value) => {
+					this.plugin.settings.enableShellCwdTracking = value;
+					await this.plugin.saveSettings();
+				}));
+
 		new Setting(containerEl).setName('Agent hook notifications').setHeading();
 
 		new Setting(containerEl)
