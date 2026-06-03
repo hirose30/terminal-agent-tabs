@@ -9,6 +9,7 @@ import type { StartMode, TabLaunchConfig } from './types';
 import { OscParser } from './OscParser';
 import { buildTerminalTheme, increaseFontSize, decreaseFontSize } from './TerminalTheme';
 import { buildPersistedSessionState, parsePersistedSessionState } from './PersistedSessionState';
+import { stripPrivateModeSequences } from './utils';
 
 /** Electron module shape exposed via window.require('electron') in Obsidian desktop */
 interface ElectronModule {
@@ -333,7 +334,8 @@ export class ClaudeSessionView extends ItemView {
 		if (isRestore && startMode === 'new' && this.resumeKey && this.terminal) {
 			const scrollback = this.plugin.sessionManager.loadScrollback(this.resumeKey);
 			if (scrollback) {
-				this.terminal.write(scrollback);
+				// Strip private-mode toggles as a safety net (in case of a pre-fix/tainted dump).
+				this.terminal.write(stripPrivateModeSequences(scrollback));
 			}
 		}
 
