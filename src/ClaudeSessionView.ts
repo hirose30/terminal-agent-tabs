@@ -7,6 +7,7 @@ import type ClaudeCodeTabsPlugin from './main';
 import type { StartMode, TabLaunchConfig } from './types';
 import { OscParser } from './OscParser';
 import { buildTerminalTheme, increaseFontSize, decreaseFontSize } from './TerminalTheme';
+import { buildPersistedSessionState, parsePersistedSessionState } from './PersistedSessionState';
 
 /** Electron module shape exposed via window.require('electron') in Obsidian desktop */
 interface ElectronModule {
@@ -47,6 +48,12 @@ export class ClaudeSessionView extends ItemView {
 	private tabLaunchConfig: TabLaunchConfig | null = null;
 	private supportsResume: boolean = false;
 	private initialLaunchConfigFromState: Partial<TabLaunchConfig> | null = null;
+	// cwd recovered from persisted state on restore (Phase 1). null → default (vault).
+	private restoredCwd: string | null = null;
+	// The cwd this tab launches sessions in; reused across in-place restarts.
+	private launchCwd: string | null = null;
+	// Launch config captured from a pending new-tab open (consumed synchronously in onOpen).
+	private pendingLaunchConfigCaptured: Partial<TabLaunchConfig> | null = null;
 	private osc52Disposer: { dispose: () => void } | null = null;
 	private unsubscribeNotifications: (() => void) | null = null;
 	private badgeEl: HTMLElement | null = null;
@@ -69,17 +76,55 @@ export class ClaudeSessionView extends ItemView {
 		return 'terminal';
 	}
 
+	// Obsidian serializes getState() into workspace.json and replays it through
+	// setState() after a restart. Phase 1 persists the launch cwd here (alongside
+	// the legacy initialLaunchConfig, kept for backward read-compat) so the tab can
+	// relaunch in the same directory. Note Obsidian's restore order is
+	// onOpen -> setState, so the restored value is consumed at session-start time
+	// (deferred to onLayoutReady), not synchronously in onOpen.
+	getState(): Record<string, unknown> {
+		const base = super.getState() || {};
+		const cliId = this.tabLaunchConfig?.cliId;
+		if (!cliId) return base;
+		const additionalArgs = this.tabLaunchConfig?.additionalArgs ?? [];
+		const session = this.plugin.sessionManager.getSession(this.sessionId);
+		const cwd = session?.launchCwd ?? this.launchCwd ?? this.restoredCwd ?? null;
+		const state: Record<string, unknown> = {
+			...base,
+			initialLaunchConfig: { cliId, additionalArgs }
+		};
+		if (cwd) {
+			Object.assign(state, buildPersistedSessionState({ cliId, additionalArgs }, cwd));
+		}
+		return state;
+	}
+
 	async setState(state: unknown, result: ViewStateResult): Promise<void> {
 		const stateObj = state as Record<string, unknown> | null | undefined;
-		const launchConfig = stateObj?.initialLaunchConfig;
-		if (launchConfig && typeof launchConfig === 'object') {
-			this.initialLaunchConfigFromState = launchConfig as Partial<TabLaunchConfig>;
+		const persisted = parsePersistedSessionState(stateObj);
+		if (persisted) {
+			this.initialLaunchConfigFromState = {
+				cliId: persisted.cliId,
+				additionalArgs: persisted.additionalArgs
+			};
+			this.restoredCwd = persisted.cwd;
 		} else {
-			const legacyCliId = stateObj?.initialTargetCliId;
-			this.initialLaunchConfigFromState =
-				typeof legacyCliId === 'string' && legacyCliId.trim()
-					? { cliId: legacyCliId }
-					: null;
+			const launchConfig = stateObj?.initialLaunchConfig;
+			if (launchConfig && typeof launchConfig === 'object') {
+				this.initialLaunchConfigFromState = launchConfig as Partial<TabLaunchConfig>;
+			} else {
+				const legacyCliId = stateObj?.initialTargetCliId;
+				this.initialLaunchConfigFromState =
+					typeof legacyCliId === 'string' && legacyCliId.trim()
+						? { cliId: legacyCliId }
+						: null;
+			}
+		}
+		if (this.isDebugEnabled()) {
+			console.debug(
+				'[TerminalAgentTabs] setState: restoredCwd=', this.restoredCwd,
+				'cliId=', this.initialLaunchConfigFromState?.cliId
+			);
 		}
 		await super.setState(state, result);
 	}
@@ -121,15 +166,12 @@ export class ClaudeSessionView extends ItemView {
 
 	// eslint-disable-next-line @typescript-eslint/require-await -- Obsidian API requires Promise<void> return type
 	async onOpen(): Promise<void> {
-		const pendingLaunchConfig = this.plugin.consumePendingLaunchConfig();
-		const initialLaunchConfig =
-			pendingLaunchConfig ||
-			this.initialLaunchConfigFromState ||
-			this.getInitialLaunchConfigFromLeafState();
-		this.tabLaunchConfig = {
-			...this.plugin.sessionManager.getDefaultLaunchConfig(),
-			...(initialLaunchConfig || {})
-		};
+		// Consume the pending new-tab launch config NOW (it is a transient plugin-level
+		// slot the next tab-open would clobber), but defer the actual session start to
+		// onLayoutReady. On restore Obsidian calls onOpen BEFORE setState, so the restored
+		// cwd/cliId are only available after the workspace layout has been restored.
+		this.pendingLaunchConfigCaptured = this.plugin.consumePendingLaunchConfig();
+		this.tabLaunchConfig = this.resolveTabLaunchConfig();
 
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
@@ -207,8 +249,31 @@ export class ClaudeSessionView extends ItemView {
 
 		this.updateDefaultHeaderFromConfig();
 
-		this.startSession('new');
+		// Defer session start until the workspace layout is ready. On restore this
+		// guarantees setState() has already delivered the persisted cwd; for a new tab
+		// the layout is already ready, so this runs immediately.
+		this.app.workspace.onLayoutReady(() => this.startInitialSession());
+	}
 
+	private resolveTabLaunchConfig(): TabLaunchConfig {
+		const initial =
+			this.pendingLaunchConfigCaptured ||
+			this.initialLaunchConfigFromState ||
+			this.getInitialLaunchConfigFromLeafState();
+		return {
+			...this.plugin.sessionManager.getDefaultLaunchConfig(),
+			...(initial || {})
+		};
+	}
+
+	private startInitialSession(): void {
+		// The tab may have been closed before the layout became ready.
+		if (this.isExited || !this.terminal) return;
+		// Recompute now that setState() has run on the restore path.
+		this.tabLaunchConfig = this.resolveTabLaunchConfig();
+		this.launchCwd = this.restoredCwd;
+		this.updateDefaultHeaderFromConfig();
+		this.startSession('new', { cwd: this.launchCwd ?? undefined });
 		// Focus terminal after session starts so user can type immediately
 		if (this.terminal) {
 			this.terminal.focus();
@@ -391,7 +456,8 @@ export class ClaudeSessionView extends ItemView {
 
 		this.startSession(startMode, {
 			parseOsc: true,
-			showNewSessionOptionOnError: startMode === 'continue'
+			showNewSessionOptionOnError: startMode === 'continue',
+			cwd: this.launchCwd ?? undefined
 		});
 
 		if (this.terminal) {
@@ -576,12 +642,13 @@ export class ClaudeSessionView extends ItemView {
 
 		this.startSession('continue', {
 			parseOsc: false,
-			showNewSessionOptionOnError: true
+			showNewSessionOptionOnError: true,
+			cwd: this.launchCwd ?? undefined
 		});
 	}
 
-	private startSession(startMode: StartMode = 'new', options?: { parseOsc?: boolean; showNewSessionOptionOnError?: boolean }): void {
-		const { parseOsc = true, showNewSessionOptionOnError = false } = options || {};
+	private startSession(startMode: StartMode = 'new', options?: { parseOsc?: boolean; showNewSessionOptionOnError?: boolean; cwd?: string }): void {
+		const { parseOsc = true, showNewSessionOptionOnError = false, cwd } = options || {};
 		const launchConfig = this.tabLaunchConfig || this.plugin.sessionManager.getDefaultLaunchConfig();
 		const canResume = this.plugin.sessionManager.isResumeSupportedForConfig(launchConfig);
 		const effectiveStartMode = startMode === 'continue' && !canResume ? 'new' : startMode;
@@ -614,13 +681,19 @@ export class ClaudeSessionView extends ItemView {
 					this.handleProcessExit(exitCode);
 				},
 				effectiveStartMode,
-				launchConfig
+				launchConfig,
+				cwd
 			);
 
 			this.plugin.sessionManager.updateSessionTerminal(this.sessionId, this.terminal, this.fitAddon);
 			const session = this.plugin.sessionManager.getSession(this.sessionId);
 			this.supportsResume = !!session?.supportsResume;
 			this.tabLaunchConfig = session?.tabLaunchConfig || launchConfig;
+			// Remember the resolved cwd (vault default when none was requested) so getState()
+			// persists a concrete directory and in-place restarts reuse it.
+			if (session?.launchCwd) {
+				this.launchCwd = session.launchCwd;
+			}
 			this.updateDefaultHeaderFromConfig();
 
 			if (this.terminal && this.fitAddon) {

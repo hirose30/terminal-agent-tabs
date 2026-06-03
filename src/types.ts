@@ -35,6 +35,8 @@ export interface Session {
 	createdAt: Date;
 	cliId: string;
 	supportsResume: boolean;
+	/** Working directory the session was spawned in (Phase 1: persisted for cwd restore). */
+	launchCwd: string;
 	tabLaunchConfig?: TabLaunchConfig;
 	lastOutputLine?: string;
 	debugLogPath?: string;

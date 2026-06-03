@@ -261,9 +261,12 @@ export class SessionManager {
 		onData: (data: string) => void,
 		onExit: (exitCode: number) => void,
 		startMode: StartMode = 'new',
-		launchConfig?: Partial<TabLaunchConfig>
+		launchConfig?: Partial<TabLaunchConfig>,
+		cwd?: string
 	): Session {
 		const resolvedLaunchConfig = this.resolveLaunchConfig(launchConfig);
+		// Phase 1 (Tier0): launch in the persisted/requested cwd, defaulting to the vault.
+		const launchCwd = typeof cwd === 'string' && cwd.trim() ? cwd.trim() : this.vaultPath;
 		const profile = this.resolveCliProfile(resolvedLaunchConfig.cliId);
 		const launchCommand = this.buildLaunchCommand(
 			profile,
@@ -285,7 +288,7 @@ export class SessionManager {
 
 		try {
 			childProcess = spawn('python3', [helperPath, commandPath, ...commandArgs], {
-				cwd: this.vaultPath,
+				cwd: launchCwd,
 				stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
 				env: this.getSpawnEnv()
 			});
@@ -307,6 +310,7 @@ export class SessionManager {
 				createdAt: new Date(),
 				cliId: profile.id,
 				supportsResume: launchCommand.supportsResume,
+				launchCwd,
 				tabLaunchConfig: resolvedLaunchConfig
 			};
 			this.sessions.set(sessionId, session);
@@ -326,6 +330,7 @@ export class SessionManager {
 			createdAt: new Date(),
 			cliId: profile.id,
 			supportsResume: launchCommand.supportsResume,
+			launchCwd,
 			tabLaunchConfig: resolvedLaunchConfig,
 			debugLogPath: debugTarget?.logPath,
 			debugStream: debugTarget?.stream ?? null
