@@ -3,7 +3,8 @@ import {
 	PERSISTED_SESSION_STATE_VERSION,
 	buildPersistedSessionState,
 	parsePersistedSessionState,
-	isSafeResumeKey
+	isSafeResumeKey,
+	isSafeCliSessionId
 } from '../PersistedSessionState';
 
 describe('PersistedSessionState', () => {
@@ -107,7 +108,9 @@ describe('PersistedSessionState', () => {
 
 		it('parses codexSessionId when safe and rejects unsafe / blank', () => {
 			expect(parsePersistedSessionState({ ...valid, codexSessionId: '  019ea0c4-e5c4  ' })?.codexSessionId).toBe('019ea0c4-e5c4');
+			expect(parsePersistedSessionState({ ...valid, codexSessionId: 'thread.abc-123' })?.codexSessionId).toBe('thread.abc-123');
 			expect(parsePersistedSessionState({ ...valid, codexSessionId: '../../x' })?.codexSessionId).toBeUndefined();
+			expect(parsePersistedSessionState({ ...valid, codexSessionId: 'has space' })?.codexSessionId).toBeUndefined();
 			expect(parsePersistedSessionState({ ...valid, codexSessionId: '   ' })?.codexSessionId).toBeUndefined();
 			expect(parsePersistedSessionState(valid)?.codexSessionId).toBeUndefined();
 		});
@@ -147,6 +150,20 @@ describe('PersistedSessionState', () => {
 			expect(isSafeResumeKey('')).toBe(false);
 			expect(isSafeResumeKey(42)).toBe(false);
 			expect(isSafeResumeKey('x'.repeat(129))).toBe(false);
+		});
+	});
+
+	describe('isSafeCliSessionId', () => {
+		it('accepts CLI-safe ids including dots', () => {
+			expect(isSafeCliSessionId('thread.abc-123_XYZ')).toBe(true);
+		});
+
+		it('rejects path separators, whitespace, empty, and over-long ids', () => {
+			expect(isSafeCliSessionId('../evil')).toBe(false);
+			expect(isSafeCliSessionId('a/b')).toBe(false);
+			expect(isSafeCliSessionId('has space')).toBe(false);
+			expect(isSafeCliSessionId('')).toBe(false);
+			expect(isSafeCliSessionId('x'.repeat(257))).toBe(false);
 		});
 	});
 });
