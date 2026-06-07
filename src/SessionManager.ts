@@ -3,6 +3,7 @@ import { Writable } from 'stream';
 import { StringDecoder } from 'string_decoder';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { FileSystemAdapter } from 'obsidian';
 import type ClaudeCodeTabsPlugin from './main';
 import type { Terminal } from '@xterm/xterm';
@@ -11,10 +12,15 @@ import type {
 	Session,
 	StartMode,
 	TabLaunchConfig,
-	CliProfile
+	CliProfile,
+	ResumeStrategy
 } from './types';
+import { isSafeResumeKey } from './PersistedSessionState';
 
 export const SPECIAL_CLI_ID_DEFAULT_SHELL = '__default_shell__';
+
+/** Phase 4: cap persisted scrollback to keep plugin-dir files small. */
+const SCROLLBACK_MAX_CHARS = 400_000;
 
 export type SessionChangeCallback = () => void;
 
@@ -41,10 +47,109 @@ export class SessionManager {
 		const adapter = this.plugin.app.vault.adapter;
 		this.vaultPath = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : '';
 		this.pluginDir = this.resolvePluginDir();
+		this.writeShellIntegration();
 	}
 
 	getPluginDir(): string {
 		return this.pluginDir;
+	}
+
+	private shellIntegrationDir(): string {
+		return path.join(this.pluginDir, 'shell-integration');
+	}
+
+	/**
+	 * Phase 3 enabler: a self-contained ZDOTDIR whose rc files source the user's real zsh
+	 * config (via $TAT_REAL_ZDOTDIR, falling back to $HOME so config always loads) and then add
+	 * an OSC 7 precmd so the shell reports its live cwd. Activated by setting ZDOTDIR to this dir
+	 * (see getSpawnEnv). Written idempotently on load; harmless when ZDOTDIR isn't pointed here.
+	 */
+	private writeShellIntegration(): void {
+		try {
+			const dir = this.shellIntegrationDir();
+			fs.mkdirSync(dir, { recursive: true });
+			// CRITICAL: source the user's real rc with ZDOTDIR pointed at THEIR dir, so frameworks
+			// that read $ZDOTDIR (zimfw uses $ZDOTDIR/.zim, prezto, etc.) locate their data
+			// correctly. Only point ZDOTDIR back here to load the *next* integration file.
+			const real = '${TAT_REAL_ZDOTDIR:-$HOME}';
+			const chain = (file: string) => [
+				'_tat_mine="$ZDOTDIR"',
+				`export ZDOTDIR="${real}"`,
+				`[ -f "$ZDOTDIR/${file}" ] && source "$ZDOTDIR/${file}"`,
+				// capture any ZDOTDIR the user's rc set, then return to the integration dir.
+				'export TAT_REAL_ZDOTDIR="$ZDOTDIR"',
+				'ZDOTDIR="$_tat_mine"',
+				'unset _tat_mine',
+				''
+			].join('\n');
+			fs.writeFileSync(path.join(dir, '.zshenv'), chain('.zshenv'), { mode: 0o600 });
+			fs.writeFileSync(path.join(dir, '.zprofile'), chain('.zprofile'), { mode: 0o600 });
+			const zshrc = [
+				// .zshrc is the last interactive init file: keep ZDOTDIR at the real dir while
+				// sourcing AND afterwards, so the user's framework + subshells + .zlogin use their
+				// own config dir (and are never re-injected).
+				`export ZDOTDIR="${real}"`,
+				`[ -f "$ZDOTDIR/.zshrc" ] && source "$ZDOTDIR/.zshrc"`,
+				'# Report the live working directory via OSC 7 for session persistence.',
+				`_tat_osc7_cwd() { printf '\\033]7;file://%s%s\\007' "\${HOST}" "\${PWD}"; }`,
+				'autoload -Uz add-zsh-hook 2>/dev/null && add-zsh-hook precmd _tat_osc7_cwd || precmd_functions+=(_tat_osc7_cwd)',
+				''
+			].join('\n');
+			fs.writeFileSync(path.join(dir, '.zshrc'), zshrc, { mode: 0o600 });
+		} catch (e) {
+			console.debug('[TerminalAgentTabs] Failed to write shell integration:', e);
+		}
+	}
+
+	private scrollbackDir(): string {
+		return path.join(this.pluginDir, 'scrollback');
+	}
+
+	/** Phase 4: persist a tab's serialized terminal buffer (keyed by a stable per-tab id). Best-effort. */
+	saveScrollback(key: string, content: string): void {
+		if (!isSafeResumeKey(key) || !content) return;
+		try {
+			const dir = this.scrollbackDir();
+			fs.mkdirSync(dir, { recursive: true });
+			// Keep the tail when over the cap — the most recent screen matters most.
+			const capped = content.length > SCROLLBACK_MAX_CHARS
+				? content.slice(content.length - SCROLLBACK_MAX_CHARS)
+				: content;
+			fs.writeFileSync(path.join(dir, `${key}.txt`), capped, { mode: 0o600 });
+		} catch (e) {
+			console.debug('[TerminalAgentTabs] Failed to save scrollback:', e);
+		}
+	}
+
+	/** Load a tab's persisted scrollback for repaint, or null if none. */
+	loadScrollback(key: string): string | null {
+		if (!isSafeResumeKey(key)) return null;
+		try {
+			const file = path.join(this.scrollbackDir(), `${key}.txt`);
+			if (!fs.existsSync(file)) return null;
+			return fs.readFileSync(file, 'utf8');
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Prune scrollback files older than maxAgeMs (orphans from closed tabs). Recently
+	 * saved files (e.g. from the last quit) keep a fresh mtime and survive for restore.
+	 */
+	pruneScrollback(maxAgeMs: number): void {
+		try {
+			const dir = this.scrollbackDir();
+			if (!fs.existsSync(dir)) return;
+			const now = Date.now();
+			for (const name of fs.readdirSync(dir)) {
+				if (!name.endsWith('.txt')) continue;
+				const file = path.join(dir, name);
+				try {
+					if (now - fs.statSync(file).mtimeMs > maxAgeMs) fs.unlinkSync(file);
+				} catch { /* ignore individual file errors */ }
+			}
+		} catch { /* ignore */ }
 	}
 
 	private getPtyHelperPath(): string {
@@ -81,12 +186,21 @@ export class SessionManager {
 
 	private getSpawnEnv(): NodeJS.ProcessEnv {
 		const envPath = process.env.PATH || '';
-		return {
+		const env: NodeJS.ProcessEnv = {
 			...process.env,
 			PATH: this.buildPathEnv(envPath),
 			TERM: 'xterm-256color',
 			CLICOLOR: this.isDebugEnabled() ? '0' : process.env.CLICOLOR
 		};
+		// Phase 3: point zsh at the integration ZDOTDIR so it reports cwd via OSC 7.
+		// Only for zsh (other shells ignore ZDOTDIR); the integration sources the user's
+		// real config so this never breaks their shell, just adds cwd reporting.
+		const shell = process.env.SHELL || '';
+		if (this.plugin.settings.enableShellCwdTracking && shell.endsWith('zsh')) {
+			env.TAT_REAL_ZDOTDIR = process.env.ZDOTDIR || os.homedir();
+			env.ZDOTDIR = this.shellIntegrationDir();
+		}
+		return env;
 	}
 
 	/** Register a listener for session state changes. Returns an unsubscribe function. */
@@ -167,17 +281,184 @@ export class SessionManager {
 		throw new Error('No CLI profile is configured. Add one in plugin settings.');
 	}
 
-	private buildLaunchCommand(profile: CliProfile, startMode: StartMode, additionalArgs: string[]) {
-		const canResume = profile.supportsResume && profile.resumeArgs.length > 0;
-		const shouldResume = startMode === 'continue' && canResume;
+	/**
+	 * Resolve a profile's Tier1 resume strategy. Explicit `resumeStrategy` wins;
+	 * otherwise infer from the executable so existing claude/codex profiles work
+	 * without reconfiguration. Everything else → 'none'.
+	 */
+	private resolveResumeStrategy(profile: CliProfile): ResumeStrategy {
+		if (profile.resumeStrategy) return profile.resumeStrategy;
+		const exe = profile.executablePath.toLowerCase();
+		if (exe === 'claude' || exe.endsWith('/claude') || profile.id === 'claude') return 'assign-id';
+		if (exe === 'codex' || exe.endsWith('/codex') || profile.id === 'codex') return 'continue-latest';
+		return 'none';
+	}
+
+	getResumeStrategy(launchConfig: TabLaunchConfig): ResumeStrategy {
+		return this.resolveResumeStrategy(this.resolveCliProfile(launchConfig.cliId));
+	}
+
+	/**
+	 * Whether a Claude transcript exists for (cwd, sessionId), used to decide if an
+	 * `assign-id` tab can be resumed. Read-only check against ~/.claude/projects.
+	 * Claude encodes the cwd by realpath-ing it and replacing '/' and '.' with '-'.
+	 */
+	claudeTranscriptExists(cwd: string, sessionId: string): boolean {
+		if (!cwd || !sessionId) return false;
+		try {
+			let real = cwd;
+			try { real = fs.realpathSync(cwd); } catch { /* fall back to the raw path */ }
+			const encoded = real.replace(/[/.]/g, '-');
+			const transcript = path.join(os.homedir(), '.claude', 'projects', encoded, `${sessionId}.jsonl`);
+			return fs.existsSync(transcript);
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * Tier1 (Codex) B3 fix. Codex picks its own session id, so after launching a codex tab we
+	 * watch ~/.codex/sessions for the rollout this spawn created (cwd match, created at/after
+	 * the spawn time) and record its id on the session. getState() then persists it so restore
+	 * can `codex resume <id>` instead of `--last`. Best-effort: any failure leaves the prior id
+	 * intact and restore falls back to `--last` (no regression). Re-runs on resume too, so a
+	 * fork-on-resume id is picked up; an append-on-resume keeps the existing id.
+	 */
+	private async captureCodexSessionId(session: Session, cwd: string, sinceMs: number): Promise<void> {
+		let realCwd = cwd;
+		try { realCwd = fs.realpathSync(cwd); } catch { /* use raw path */ }
+		const deadlineMs = Date.now() + 15000;
+		while (Date.now() < deadlineMs) {
+			// Stop if the tab/session went away (closed before the rollout appeared).
+			if (this.sessions.get(session.sessionId) !== session) return;
+			const id = this.findNewestCodexRollout(realCwd, sinceMs);
+			if (id) {
+				if (id !== session.codexSessionId) {
+					session.codexSessionId = id;
+					try { this.plugin.app.workspace.requestSaveLayout(); } catch { /* ignore */ }
+					this.notifyChange();
+				}
+				return;
+			}
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+		}
+	}
+
+	/** Newest codex rollout id for `realCwd` whose session was created at/after `sinceMs`, or null. */
+	private findNewestCodexRollout(realCwd: string, sinceMs: number): string | null {
+		try {
+			const root = path.join(os.homedir(), '.codex', 'sessions');
+			let bestId: string | null = null;
+			let bestTs = sinceMs;
+			for (const dir of this.recentCodexDayDirs(root, 2)) {
+				let entries: string[];
+				try { entries = fs.readdirSync(dir); } catch { continue; }
+				for (const name of entries) {
+					if (!name.startsWith('rollout-') || !name.endsWith('.jsonl')) continue;
+					const file = path.join(dir, name);
+					try {
+						if (fs.statSync(file).mtimeMs < sinceMs - 2000) continue; // cheap pre-filter
+					} catch { continue; }
+					const meta = this.readCodexSessionMeta(file);
+					if (!meta?.id || !meta.cwd) continue;
+					let metaCwd = meta.cwd;
+					try { metaCwd = fs.realpathSync(meta.cwd); } catch { /* use raw */ }
+					if (metaCwd !== realCwd) continue;
+					const ts = Date.parse(meta.timestamp ?? '');
+					if (!Number.isFinite(ts) || ts < sinceMs) continue;
+					if (ts >= bestTs) { bestTs = ts; bestId = meta.id; }
+				}
+			}
+			return bestId;
+		} catch {
+			return null;
+		}
+	}
+
+	/** Up to `limit` newest day directories (YYYY/MM/DD) under the codex sessions root. */
+	private recentCodexDayDirs(root: string, limit: number): string[] {
+		const newestDirs = (dir: string, take: number): string[] => {
+			try {
+				return fs.readdirSync(dir, { withFileTypes: true })
+					.filter((e) => e.isDirectory())
+					.map((e) => e.name)
+					.sort()
+					.reverse()
+					.slice(0, take);
+			} catch {
+				return [];
+			}
+		};
+		const result: string[] = [];
+		for (const y of newestDirs(root, 1)) {
+			const yDir = path.join(root, y);
+			for (const m of newestDirs(yDir, 1)) {
+				const mDir = path.join(yDir, m);
+				for (const d of newestDirs(mDir, limit)) {
+					result.push(path.join(mDir, d));
+				}
+			}
+		}
+		return result;
+	}
+
+	/** Parse a codex rollout's first line (the `session_meta` record). Bounded read; null on failure. */
+	private readCodexSessionMeta(file: string): { id?: string; cwd?: string; timestamp?: string } | null {
+		let fd: number | null = null;
+		try {
+			fd = fs.openSync(file, 'r');
+			const buf = Buffer.alloc(262144);
+			const bytes = fs.readSync(fd, buf, 0, buf.length, 0);
+			const text = buf.toString('utf8', 0, bytes);
+			const nl = text.indexOf('\n');
+			const firstLine = nl >= 0 ? text.slice(0, nl) : text;
+			const obj = JSON.parse(firstLine) as { type?: string; timestamp?: string; payload?: Record<string, unknown> };
+			if (obj?.type !== 'session_meta' || !obj.payload) return null;
+			const p = obj.payload;
+			return {
+				id: typeof p.id === 'string' ? p.id : undefined,
+				cwd: typeof p.cwd === 'string' ? p.cwd : undefined,
+				timestamp: typeof p.timestamp === 'string' ? p.timestamp : obj.timestamp
+			};
+		} catch {
+			return null;
+		} finally {
+			if (fd !== null) {
+				try { fs.closeSync(fd); } catch { /* ignore */ }
+			}
+		}
+	}
+
+	private buildLaunchCommand(profile: CliProfile, startMode: StartMode, additionalArgs: string[], resumeKey?: string, codexSessionId?: string) {
+		const strategy = this.resolveResumeStrategy(profile);
+		const legacyCanResume = profile.supportsResume && profile.resumeArgs.length > 0;
+		const canResume = strategy === 'assign-id' || strategy === 'continue-latest' || legacyCanResume;
 
 		const hookArgs = this.buildHookArgs(profile);
-		const args = [
-			...hookArgs,
-			...profile.defaultArgs,
-			...(shouldResume ? profile.resumeArgs : []),
-			...additionalArgs
-		];
+		const base = [...hookArgs, ...profile.defaultArgs];
+
+		let coreArgs: string[];
+		if (strategy === 'assign-id' && resumeKey) {
+			// Tier1 (Claude): deterministic per-tab id — assign on new, resume by id on restore.
+			coreArgs = startMode === 'continue'
+				? [...base, '--resume', resumeKey]
+				: [...base, '--session-id', resumeKey];
+		} else if (strategy === 'continue-latest' && startMode === 'continue') {
+			// Tier1 (Codex): resume this tab's exact prior session by id when we captured one,
+			// so two codex tabs in the same cwd don't both grab `--last` (which would collapse
+			// them onto the same most-recent session). Fall back to `--last` when no id is known.
+			// Global/default args must precede the `resume` subcommand (hookArgs is empty for codex).
+			coreArgs = codexSessionId
+				? [...base, 'resume', codexSessionId]
+				: [...base, 'resume', '--last'];
+		} else if (startMode === 'continue' && legacyCanResume) {
+			// Legacy interactive resume (e.g. picker) for profiles without a Tier1 strategy.
+			coreArgs = [...base, ...profile.resumeArgs];
+		} else {
+			coreArgs = [...base];
+		}
+
+		const args = [...coreArgs, ...additionalArgs];
 
 		// GUI-launched Obsidian inherits launchd's minimal PATH and never loads
 		// the user's shell rc files (.zprofile/.zshrc/.bashrc). When the user
@@ -253,6 +534,8 @@ export class SessionManager {
 
 	isResumeSupportedForConfig(launchConfig: TabLaunchConfig): boolean {
 		const profile = this.resolveCliProfile(launchConfig.cliId);
+		const strategy = this.resolveResumeStrategy(profile);
+		if (strategy === 'assign-id' || strategy === 'continue-latest') return true;
 		return profile.supportsResume && profile.resumeArgs.length > 0;
 	}
 
@@ -261,14 +544,29 @@ export class SessionManager {
 		onData: (data: string) => void,
 		onExit: (exitCode: number) => void,
 		startMode: StartMode = 'new',
-		launchConfig?: Partial<TabLaunchConfig>
+		launchConfig?: Partial<TabLaunchConfig>,
+		cwd?: string,
+		resumeKey?: string,
+		codexSessionId?: string
 	): Session {
 		const resolvedLaunchConfig = this.resolveLaunchConfig(launchConfig);
+		// Phase 1 (Tier0): launch in the persisted/requested cwd, defaulting to the vault.
+		// Graceful: if the persisted cwd no longer exists, fall back to the vault so spawn
+		// can't throw on a stale/deleted directory.
+		const requestedCwd = typeof cwd === 'string' && cwd.trim() ? cwd.trim() : this.vaultPath;
+		let launchCwd = requestedCwd;
+		try {
+			if (!fs.existsSync(requestedCwd)) launchCwd = this.vaultPath;
+		} catch {
+			launchCwd = this.vaultPath;
+		}
 		const profile = this.resolveCliProfile(resolvedLaunchConfig.cliId);
 		const launchCommand = this.buildLaunchCommand(
 			profile,
 			startMode,
-			resolvedLaunchConfig.additionalArgs
+			resolvedLaunchConfig.additionalArgs,
+			resumeKey,
+			codexSessionId
 		);
 
 		const commandPath = launchCommand.executablePath;
@@ -285,7 +583,7 @@ export class SessionManager {
 
 		try {
 			childProcess = spawn('python3', [helperPath, commandPath, ...commandArgs], {
-				cwd: this.vaultPath,
+				cwd: launchCwd,
 				stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
 				env: this.getSpawnEnv()
 			});
@@ -307,6 +605,7 @@ export class SessionManager {
 				createdAt: new Date(),
 				cliId: profile.id,
 				supportsResume: launchCommand.supportsResume,
+				launchCwd,
 				tabLaunchConfig: resolvedLaunchConfig
 			};
 			this.sessions.set(sessionId, session);
@@ -326,6 +625,9 @@ export class SessionManager {
 			createdAt: new Date(),
 			cliId: profile.id,
 			supportsResume: launchCommand.supportsResume,
+			launchCwd,
+			// Seed with the restored id (if any); the post-launch capture below refreshes it.
+			codexSessionId,
 			tabLaunchConfig: resolvedLaunchConfig,
 			debugLogPath: debugTarget?.logPath,
 			debugStream: debugTarget?.stream ?? null
@@ -334,6 +636,12 @@ export class SessionManager {
 		this.sessions.set(sessionId, session);
 		this.lastActiveSessionId = sessionId;
 		this.notifyChange();
+
+		// Tier1 (Codex) B3 fix: codex assigns its own session id, so capture the id this spawn
+		// just created and store it on the session for restore-by-id. Best-effort, async.
+		if (this.resolveResumeStrategy(profile) === 'continue-latest') {
+			void this.captureCodexSessionId(session, launchCwd, Date.now() - 1000);
+		}
 
 		if (childProcess.stdout) {
 			childProcess.stdout.on('data', (data: Buffer) => {

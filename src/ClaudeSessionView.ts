@@ -3,10 +3,13 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { SerializeAddon } from '@xterm/addon-serialize';
 import type ClaudeCodeTabsPlugin from './main';
 import type { StartMode, TabLaunchConfig } from './types';
 import { OscParser } from './OscParser';
 import { buildTerminalTheme, increaseFontSize, decreaseFontSize } from './TerminalTheme';
+import { buildPersistedSessionState, parsePersistedSessionState } from './PersistedSessionState';
+import { stripPrivateModeSequences } from './utils';
 
 /** Electron module shape exposed via window.require('electron') in Obsidian desktop */
 interface ElectronModule {
@@ -37,6 +40,9 @@ export class ClaudeSessionView extends ItemView {
 	sessionId: string;
 	terminal: Terminal | null = null;
 	fitAddon: FitAddon | null = null;
+	// Phase 4: scrollback serialization for repaint on restore.
+	private serializeAddon: SerializeAddon | null = null;
+	private scrollbackDirty: boolean = false;
 	headerText: string = 'Coding Session';
 	private terminalContainer: HTMLElement | null = null;
 	private statusContainer: HTMLElement | null = null;
@@ -47,9 +53,29 @@ export class ClaudeSessionView extends ItemView {
 	private tabLaunchConfig: TabLaunchConfig | null = null;
 	private supportsResume: boolean = false;
 	private initialLaunchConfigFromState: Partial<TabLaunchConfig> | null = null;
+	// cwd recovered from persisted state on restore (Phase 1). null → default (vault).
+	private restoredCwd: string | null = null;
+	// The cwd this tab launches sessions in; reused across in-place restarts.
+	private launchCwd: string | null = null;
+	// Live cwd reported by the shell via OSC 7 (Phase 3). Overrides launchCwd for persistence.
+	private liveCwd: string | null = null;
+	// Tier1 resume key (Phase 2): Claude's --session-id. Persisted, reused to --resume on restore.
+	private resumeKey: string | null = null;
+	// Tier1 (Codex): captured codex session id, persisted and reused for `codex resume <id>`.
+	private codexSessionId: string | null = null;
+	// Launch config captured from a pending new-tab open (consumed synchronously in onOpen).
+	private pendingLaunchConfigCaptured: Partial<TabLaunchConfig> | null = null;
 	private osc52Disposer: { dispose: () => void } | null = null;
 	private unsubscribeNotifications: (() => void) | null = null;
 	private badgeEl: HTMLElement | null = null;
+	// Restore-start coordination. With deferred views, a tab activated after layout is
+	// already ready fires its onLayoutReady callback synchronously — BEFORE Obsidian calls
+	// setState — so the persisted cwd/resumeKey would not yet be applied. Start the initial
+	// session only once BOTH the layout is ready AND setState has run, so restore values are
+	// always in place first. (For startup-loaded tabs setState already precedes layout-ready.)
+	private viewLayoutReady: boolean = false;
+	private viewStateApplied: boolean = false;
+	private initialSessionStarted: boolean = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: ClaudeCodeTabsPlugin) {
 		super(leaf);
@@ -69,19 +95,69 @@ export class ClaudeSessionView extends ItemView {
 		return 'terminal';
 	}
 
+	// Obsidian serializes getState() into workspace.json and replays it through
+	// setState() after a restart. Phase 1 persists the launch cwd here (alongside
+	// the legacy initialLaunchConfig, kept for backward read-compat) so the tab can
+	// relaunch in the same directory. Note Obsidian's restore order is
+	// onOpen -> setState, so the restored value is consumed at session-start time
+	// (deferred to onLayoutReady), not synchronously in onOpen.
+	getState(): Record<string, unknown> {
+		const base = super.getState() || {};
+		const cliId = this.tabLaunchConfig?.cliId;
+		if (!cliId) return base;
+		const additionalArgs = this.tabLaunchConfig?.additionalArgs ?? [];
+		const session = this.plugin.sessionManager.getSession(this.sessionId);
+		// Phase 3: a live cwd (OSC 7) wins over the launch cwd so restore returns to where the user is.
+		const cwd = this.liveCwd ?? session?.launchCwd ?? this.launchCwd ?? this.restoredCwd ?? null;
+		// The live session's captured codex id (refreshed post-launch) wins over the restored one.
+		const codexSessionId = session?.codexSessionId ?? this.codexSessionId ?? undefined;
+		const state: Record<string, unknown> = {
+			...base,
+			initialLaunchConfig: { cliId, additionalArgs }
+		};
+		if (cwd) {
+			Object.assign(state, buildPersistedSessionState({ cliId, additionalArgs }, cwd, this.resumeKey ?? undefined, codexSessionId));
+		}
+		return state;
+	}
+
 	async setState(state: unknown, result: ViewStateResult): Promise<void> {
 		const stateObj = state as Record<string, unknown> | null | undefined;
-		const launchConfig = stateObj?.initialLaunchConfig;
-		if (launchConfig && typeof launchConfig === 'object') {
-			this.initialLaunchConfigFromState = launchConfig as Partial<TabLaunchConfig>;
+		const persisted = parsePersistedSessionState(stateObj);
+		if (persisted) {
+			this.initialLaunchConfigFromState = {
+				cliId: persisted.cliId,
+				additionalArgs: persisted.additionalArgs
+			};
+			this.restoredCwd = persisted.cwd;
+			this.resumeKey = persisted.resumeKey ?? null;
+			this.codexSessionId = persisted.codexSessionId ?? null;
 		} else {
-			const legacyCliId = stateObj?.initialTargetCliId;
-			this.initialLaunchConfigFromState =
-				typeof legacyCliId === 'string' && legacyCliId.trim()
-					? { cliId: legacyCliId }
-					: null;
+			const launchConfig = stateObj?.initialLaunchConfig;
+			if (launchConfig && typeof launchConfig === 'object') {
+				this.initialLaunchConfigFromState = launchConfig as Partial<TabLaunchConfig>;
+			} else {
+				const legacyCliId = stateObj?.initialTargetCliId;
+				this.initialLaunchConfigFromState =
+					typeof legacyCliId === 'string' && legacyCliId.trim()
+						? { cliId: legacyCliId }
+						: null;
+			}
+		}
+		if (this.isDebugEnabled()) {
+			console.debug(
+				'[TerminalAgentTabs] setState: restoredCwd=', this.restoredCwd,
+				'cliId=', this.initialLaunchConfigFromState?.cliId,
+				'resumeKey=', this.resumeKey
+			);
 		}
 		await super.setState(state, result);
+
+		// Persisted cwd/resumeKey are now applied; release the restore-start gate. For deferred
+		// tabs this is what lets startInitialSession see the restored values (fixes the race
+		// where onLayoutReady fired before setState and the tab started fresh).
+		this.viewStateApplied = true;
+		this.maybeStartInitialSession();
 	}
 
 	private getInitialLaunchConfigFromLeafState(): Partial<TabLaunchConfig> | null {
@@ -121,15 +197,12 @@ export class ClaudeSessionView extends ItemView {
 
 	// eslint-disable-next-line @typescript-eslint/require-await -- Obsidian API requires Promise<void> return type
 	async onOpen(): Promise<void> {
-		const pendingLaunchConfig = this.plugin.consumePendingLaunchConfig();
-		const initialLaunchConfig =
-			pendingLaunchConfig ||
-			this.initialLaunchConfigFromState ||
-			this.getInitialLaunchConfigFromLeafState();
-		this.tabLaunchConfig = {
-			...this.plugin.sessionManager.getDefaultLaunchConfig(),
-			...(initialLaunchConfig || {})
-		};
+		// Consume the pending new-tab launch config NOW (it is a transient plugin-level
+		// slot the next tab-open would clobber), but defer the actual session start to
+		// onLayoutReady. On restore Obsidian calls onOpen BEFORE setState, so the restored
+		// cwd/cliId are only available after the workspace layout has been restored.
+		this.pendingLaunchConfigCaptured = this.plugin.consumePendingLaunchConfig();
+		this.tabLaunchConfig = this.resolveTabLaunchConfig();
 
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
@@ -169,6 +242,7 @@ export class ClaudeSessionView extends ItemView {
 		this.terminal.open(this.terminalContainer);
 		this.registerOsc52ClipboardSync();
 		this.loadWebglRenderer();
+		this.loadSerializeAddon();
 
 		this.fitAddon.fit();
 
@@ -207,15 +281,131 @@ export class ClaudeSessionView extends ItemView {
 
 		this.updateDefaultHeaderFromConfig();
 
-		this.startSession('new');
+		// Phase 4: periodically persist the scrollback (debounced via a dirty flag) so a
+		// crash/quit still leaves a recent screen to repaint.
+		this.registerInterval(window.setInterval(() => this.autosaveScrollback(), 5000));
 
+		// Defer session start until the workspace layout is ready AND setState has applied any
+		// persisted state (see maybeStartInitialSession). At startup the order is onOpen ->
+		// setState -> layout-ready; for a deferred tab activated later, layout is already ready
+		// so this callback runs before setState — the flag coordination handles both.
+		this.app.workspace.onLayoutReady(() => {
+			this.viewLayoutReady = true;
+			this.maybeStartInitialSession();
+			// Safety net: a creation path that never calls setState must not leave the tab
+			// blank forever. setState normally arrives within a few ms; wait a bit longer.
+			if (!this.initialSessionStarted) {
+				window.setTimeout(() => {
+					if (this.initialSessionStarted) return;
+					this.viewStateApplied = true;
+					this.maybeStartInitialSession();
+				}, 150);
+			}
+		});
+	}
+
+	/** Start the initial session once both the layout is ready and setState has applied. */
+	private maybeStartInitialSession(): void {
+		if (this.initialSessionStarted) return;
+		if (!this.viewLayoutReady || !this.viewStateApplied) return;
+		this.initialSessionStarted = true;
+		this.startInitialSession();
+	}
+
+	private loadSerializeAddon(): void {
+		if (!this.terminal) return;
+		try {
+			this.serializeAddon = new SerializeAddon();
+			this.terminal.loadAddon(this.serializeAddon);
+		} catch (e) {
+			console.debug('[TerminalAgentTabs] Serialize addon not available:', e);
+		}
+	}
+
+	private autosaveScrollback(): void {
+		if (this.scrollbackDirty) this.saveScrollbackNow();
+	}
+
+	private saveScrollbackNow(): void {
+		if (!this.terminal || !this.serializeAddon || !this.resumeKey) return;
+		try {
+			// excludeModes/excludeAltBuffer keep the dump to plain normal-buffer text:
+			// replaying mode-set or alt-screen sequences can corrupt a fresh terminal.
+			const content = this.serializeAddon.serialize({
+				scrollback: 4000,
+				excludeModes: true,
+				excludeAltBuffer: true
+			});
+			this.plugin.sessionManager.saveScrollback(this.resumeKey, content);
+			this.scrollbackDirty = false;
+		} catch (e) {
+			if (this.debugEnabled) {
+				console.debug('[TerminalAgentTabs] scrollback serialize failed:', e);
+			}
+		}
+	}
+
+	private resolveTabLaunchConfig(): TabLaunchConfig {
+		const initial =
+			this.pendingLaunchConfigCaptured ||
+			this.initialLaunchConfigFromState ||
+			this.getInitialLaunchConfigFromLeafState();
+		return {
+			...this.plugin.sessionManager.getDefaultLaunchConfig(),
+			...(initial || {})
+		};
+	}
+
+	private startInitialSession(): void {
+		// The tab may have been closed before the layout became ready.
+		if (this.isExited || !this.terminal) return;
+		// Recompute now that setState() has run on the restore path.
+		this.tabLaunchConfig = this.resolveTabLaunchConfig();
+		this.launchCwd = this.restoredCwd;
+		this.updateDefaultHeaderFromConfig();
+
+		// Tier1 (Phase 2): a restored tab resumes its prior conversation when possible.
+		const isRestore = this.restoredCwd != null || this.resumeKey != null;
+		const startMode: StartMode = isRestore && this.canResumeRestoredSession() ? 'continue' : 'new';
+
+		// Phase 4: repaint the last screen only for sessions that won't redraw themselves.
+		// A resumed agent (`claude --resume`, `codex resume`) repaints its own UI, and
+		// replaying a TUI's serialized buffer can corrupt the display — so repaint on 'new' only.
+		if (isRestore && startMode === 'new' && this.resumeKey && this.terminal) {
+			const scrollback = this.plugin.sessionManager.loadScrollback(this.resumeKey);
+			if (scrollback) {
+				// Strip private-mode toggles as a safety net (in case of a pre-fix/tainted dump).
+				this.terminal.write(stripPrivateModeSequences(scrollback));
+			}
+		}
+
+		this.startSession(startMode, { cwd: this.launchCwd ?? undefined });
 		// Focus terminal after session starts so user can type immediately
 		if (this.terminal) {
 			this.terminal.focus();
 		}
 	}
 
+	/** Whether the restored persisted state is enough to resume (vs. start fresh). */
+	private canResumeRestoredSession(): boolean {
+		const config = this.tabLaunchConfig;
+		if (!config) return false;
+		const strategy = this.plugin.sessionManager.getResumeStrategy(config);
+		if (strategy === 'assign-id') {
+			return !!this.resumeKey
+				&& this.plugin.sessionManager.claudeTranscriptExists(this.launchCwd ?? '', this.resumeKey);
+		}
+		if (strategy === 'continue-latest') {
+			// Codex resumes the most recent session scoped to this cwd (best-effort).
+			return !!this.launchCwd;
+		}
+		return false;
+	}
+
 	async onClose(): Promise<void> {
+		// Phase 4: capture the final screen while the terminal is still alive (also covers quit).
+		this.saveScrollbackNow();
+
 		if (this.unsubscribeNotifications) {
 			this.unsubscribeNotifications();
 			this.unsubscribeNotifications = null;
@@ -375,6 +565,8 @@ export class ClaudeSessionView extends ItemView {
 	private restartSession(startMode: StartMode = 'new'): void {
 		this.isExited = false;
 		this.oscParser.reset();
+		// The new session will re-report its cwd via OSC 7; drop the stale value.
+		this.liveCwd = null;
 
 		if (this.statusContainer) {
 			this.statusContainer.addClass('is-hidden');
@@ -391,7 +583,8 @@ export class ClaudeSessionView extends ItemView {
 
 		this.startSession(startMode, {
 			parseOsc: true,
-			showNewSessionOptionOnError: startMode === 'continue'
+			showNewSessionOptionOnError: startMode === 'continue',
+			cwd: this.launchCwd ?? undefined
 		});
 
 		if (this.terminal) {
@@ -576,18 +769,32 @@ export class ClaudeSessionView extends ItemView {
 
 		this.startSession('continue', {
 			parseOsc: false,
-			showNewSessionOptionOnError: true
+			showNewSessionOptionOnError: true,
+			cwd: this.launchCwd ?? undefined
 		});
 	}
 
-	private startSession(startMode: StartMode = 'new', options?: { parseOsc?: boolean; showNewSessionOptionOnError?: boolean }): void {
-		const { parseOsc = true, showNewSessionOptionOnError = false } = options || {};
+	private startSession(startMode: StartMode = 'new', options?: { parseOsc?: boolean; showNewSessionOptionOnError?: boolean; cwd?: string }): void {
+		const { parseOsc = true, showNewSessionOptionOnError = false, cwd } = options || {};
 		const launchConfig = this.tabLaunchConfig || this.plugin.sessionManager.getDefaultLaunchConfig();
 		const canResume = this.plugin.sessionManager.isResumeSupportedForConfig(launchConfig);
-		const effectiveStartMode = startMode === 'continue' && !canResume ? 'new' : startMode;
+		const strategy = this.plugin.sessionManager.getResumeStrategy(launchConfig);
+		let effectiveStartMode: StartMode = startMode === 'continue' && !canResume ? 'new' : startMode;
+		// Tier1 assign-id needs a key to resume by id; without one, start a fresh conversation.
+		if (strategy === 'assign-id' && effectiveStartMode === 'continue' && !this.resumeKey) {
+			effectiveStartMode = 'new';
+		}
 
 		if (startMode === 'continue' && effectiveStartMode === 'new') {
 			new Notice('Resume is not configured for this CLI profile. Starting a new session.');
+		}
+
+		// A new launch gets a fresh per-tab id, persisted for restore. Used as Claude's
+		// --session-id (assign-id strategy) and as the scrollback key (all profiles).
+		if (effectiveStartMode === 'new') {
+			this.resumeKey = crypto.randomUUID();
+			// A fresh codex session will be captured post-launch; drop any restored id.
+			this.codexSessionId = null;
 		}
 
 		try {
@@ -600,8 +807,13 @@ export class ClaudeSessionView extends ItemView {
 							if (result.title) {
 								this.updateHeaderText(result.title);
 							}
+							if (result.cwd) {
+								// Phase 3: track the shell's live cwd so restore returns to it.
+								this.liveCwd = result.cwd;
+							}
 						}
 						this.terminal.write(data);
+						this.scrollbackDirty = true;
 						// Feed output monitor for pattern detection and last-line tracking
 						this.plugin.outputMonitor.feed(this.sessionId, data);
 						const lastLine = this.plugin.outputMonitor.getLastLine(this.sessionId);
@@ -614,13 +826,21 @@ export class ClaudeSessionView extends ItemView {
 					this.handleProcessExit(exitCode);
 				},
 				effectiveStartMode,
-				launchConfig
+				launchConfig,
+				cwd,
+				this.resumeKey ?? undefined,
+				this.codexSessionId ?? undefined
 			);
 
 			this.plugin.sessionManager.updateSessionTerminal(this.sessionId, this.terminal, this.fitAddon);
 			const session = this.plugin.sessionManager.getSession(this.sessionId);
 			this.supportsResume = !!session?.supportsResume;
 			this.tabLaunchConfig = session?.tabLaunchConfig || launchConfig;
+			// Remember the resolved cwd (vault default when none was requested) so getState()
+			// persists a concrete directory and in-place restarts reuse it.
+			if (session?.launchCwd) {
+				this.launchCwd = session.launchCwd;
+			}
 			this.updateDefaultHeaderFromConfig();
 
 			if (this.terminal && this.fitAddon) {

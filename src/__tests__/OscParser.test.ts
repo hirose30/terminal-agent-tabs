@@ -92,5 +92,54 @@ describe('OscParser', () => {
 			const result = parser.parse('te\x07');
 			expect(result.title).toBeNull();
 		});
+
+		it('clears current cwd', () => {
+			parser.parse('\x1b]7;file://host/Users/me\x07');
+			parser.reset();
+			expect(parser.getCurrentCwd()).toBeNull();
+		});
+	});
+
+	describe('OSC 7 (cwd)', () => {
+		it('extracts path from file:// URI with host', () => {
+			const result = parser.parse('\x1b]7;file://myhost/Users/me/project\x07');
+			expect(result.cwd).toBe('/Users/me/project');
+		});
+
+		it('extracts path from file:// URI with empty host', () => {
+			const result = parser.parse('\x1b]7;file:///Users/me/dir\x07');
+			expect(result.cwd).toBe('/Users/me/dir');
+		});
+
+		it('decodes percent-encoded path segments', () => {
+			const result = parser.parse('\x1b]7;file://host/Users/me/my%20dir\x07');
+			expect(result.cwd).toBe('/Users/me/my dir');
+		});
+
+		it('accepts a bare absolute path', () => {
+			const result = parser.parse('\x1b]7;/Users/me/bare\x07');
+			expect(result.cwd).toBe('/Users/me/bare');
+		});
+
+		it('handles OSC 7 with ST terminator', () => {
+			const result = parser.parse('\x1b]7;file://host/srv\x1b\\');
+			expect(result.cwd).toBe('/srv');
+		});
+
+		it('returns null cwd for non-OSC-7 sequences', () => {
+			expect(parser.parse('\x1b]0;Title\x07').cwd).toBeNull();
+			expect(parser.parse('plain text').cwd).toBeNull();
+		});
+
+		it('tracks the latest cwd across calls via getCurrentCwd()', () => {
+			parser.parse('\x1b]7;file://h/a\x07');
+			parser.parse('\x1b]7;file://h/b\x07');
+			expect(parser.getCurrentCwd()).toBe('/b');
+		});
+
+		it('buffers a split OSC 7 sequence', () => {
+			expect(parser.parse('\x1b]7;file://host/Users/me/sp').cwd).toBeNull();
+			expect(parser.parse('lit\x07').cwd).toBe('/Users/me/split');
+		});
 	});
 });

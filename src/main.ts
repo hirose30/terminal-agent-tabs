@@ -58,6 +58,8 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 
 		this.sessionManager = new SessionManager(this);
 		ensureEmbeddedResources(this.sessionManager.getPluginDir());
+		// Phase 4: drop scrollback files from tabs closed long ago (recent ones survive for restore).
+		this.sessionManager.pruneScrollback(14 * 24 * 60 * 60 * 1000);
 		this.notificationStore = new NotificationStore();
 		this.outputMonitor = new OutputMonitor();
 		this.dockBadge = new DockBadge();
@@ -260,6 +262,8 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 			terminalCustomGlyphs: sanitizeTerminalCustomGlyphs(loaded.terminalCustomGlyphs),
 			enableOsc52ClipboardSync:
 				loaded.enableOsc52ClipboardSync ?? DEFAULT_SETTINGS.enableOsc52ClipboardSync,
+			enableShellCwdTracking:
+				loaded.enableShellCwdTracking ?? DEFAULT_SETTINGS.enableShellCwdTracking,
 			enableHookNotifications:
 				loaded.enableHookNotifications ?? DEFAULT_SETTINGS.enableHookNotifications,
 			enableHookNotificationSound:
