@@ -66,6 +66,14 @@ export class ClaudeSessionView extends ItemView {
 	private osc52Disposer: { dispose: () => void } | null = null;
 	private unsubscribeNotifications: (() => void) | null = null;
 	private badgeEl: HTMLElement | null = null;
+	// Restore-start coordination. With deferred views, a tab activated after layout is
+	// already ready fires its onLayoutReady callback synchronously — BEFORE Obsidian calls
+	// setState — so the persisted cwd/resumeKey would not yet be applied. Start the initial
+	// session only once BOTH the layout is ready AND setState has run, so restore values are
+	// always in place first. (For startup-loaded tabs setState already precedes layout-ready.)
+	private viewLayoutReady: boolean = false;
+	private viewStateApplied: boolean = false;
+	private initialSessionStarted: boolean = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: ClaudeCodeTabsPlugin) {
 		super(leaf);
@@ -139,6 +147,12 @@ export class ClaudeSessionView extends ItemView {
 			);
 		}
 		await super.setState(state, result);
+
+		// Persisted cwd/resumeKey are now applied; release the restore-start gate. For deferred
+		// tabs this is what lets startInitialSession see the restored values (fixes the race
+		// where onLayoutReady fired before setState and the tab started fresh).
+		this.viewStateApplied = true;
+		this.maybeStartInitialSession();
 	}
 
 	private getInitialLaunchConfigFromLeafState(): Partial<TabLaunchConfig> | null {
@@ -266,12 +280,31 @@ export class ClaudeSessionView extends ItemView {
 		// crash/quit still leaves a recent screen to repaint.
 		this.registerInterval(window.setInterval(() => this.autosaveScrollback(), 5000));
 
-		// Defer session start until the workspace layout is ready. Workspace restore happens
-		// at startup while layout is NOT yet ready, so onOpen -> setState (persisted cwd/
-		// resumeKey) -> layout-ready -> this callback: the restored state is in place before we
-		// start. A tab created after layout is already ready (a fresh user-opened tab) has no
-		// persisted state and onLayoutReady runs immediately — correctly starting a new session.
-		this.app.workspace.onLayoutReady(() => this.startInitialSession());
+		// Defer session start until the workspace layout is ready AND setState has applied any
+		// persisted state (see maybeStartInitialSession). At startup the order is onOpen ->
+		// setState -> layout-ready; for a deferred tab activated later, layout is already ready
+		// so this callback runs before setState — the flag coordination handles both.
+		this.app.workspace.onLayoutReady(() => {
+			this.viewLayoutReady = true;
+			this.maybeStartInitialSession();
+			// Safety net: a creation path that never calls setState must not leave the tab
+			// blank forever. setState normally arrives within a few ms; wait a bit longer.
+			if (!this.initialSessionStarted) {
+				window.setTimeout(() => {
+					if (this.initialSessionStarted) return;
+					this.viewStateApplied = true;
+					this.maybeStartInitialSession();
+				}, 150);
+			}
+		});
+	}
+
+	/** Start the initial session once both the layout is ready and setState has applied. */
+	private maybeStartInitialSession(): void {
+		if (this.initialSessionStarted) return;
+		if (!this.viewLayoutReady || !this.viewStateApplied) return;
+		this.initialSessionStarted = true;
+		this.startInitialSession();
 	}
 
 	private loadSerializeAddon(): void {
