@@ -44,6 +44,17 @@ describe('PersistedSessionState', () => {
 			expect(buildPersistedSessionState({ cliId: 'claude', additionalArgs: [] }, '/c', '   ').resumeKey).toBeUndefined();
 			expect(buildPersistedSessionState({ cliId: 'claude', additionalArgs: [] }, '/c').resumeKey).toBeUndefined();
 		});
+
+		it('includes codexSessionId when provided and round-trips', () => {
+			const built = buildPersistedSessionState({ cliId: 'codex', additionalArgs: [] }, '/c', undefined, 'sess-abc');
+			expect(built.codexSessionId).toBe('sess-abc');
+			expect(parsePersistedSessionState(built)).toEqual(built);
+		});
+
+		it('omits codexSessionId when blank or absent', () => {
+			expect(buildPersistedSessionState({ cliId: 'codex', additionalArgs: [] }, '/c', undefined, '  ').codexSessionId).toBeUndefined();
+			expect(buildPersistedSessionState({ cliId: 'codex', additionalArgs: [] }, '/c').codexSessionId).toBeUndefined();
+		});
 	});
 
 	describe('parsePersistedSessionState()', () => {
@@ -92,6 +103,13 @@ describe('PersistedSessionState', () => {
 			expect(parsePersistedSessionState({ ...valid, resumeKey: '../../etc/passwd' })?.resumeKey).toBeUndefined();
 			expect(parsePersistedSessionState({ ...valid, resumeKey: 'a/b' })?.resumeKey).toBeUndefined();
 			expect(parsePersistedSessionState({ ...valid, resumeKey: 'a.txt' })?.resumeKey).toBeUndefined();
+		});
+
+		it('parses codexSessionId when safe and rejects unsafe / blank', () => {
+			expect(parsePersistedSessionState({ ...valid, codexSessionId: '  019ea0c4-e5c4  ' })?.codexSessionId).toBe('019ea0c4-e5c4');
+			expect(parsePersistedSessionState({ ...valid, codexSessionId: '../../x' })?.codexSessionId).toBeUndefined();
+			expect(parsePersistedSessionState({ ...valid, codexSessionId: '   ' })?.codexSessionId).toBeUndefined();
+			expect(parsePersistedSessionState(valid)?.codexSessionId).toBeUndefined();
 		});
 
 		// Graceful degradation → null (callers fall back to a new session in the vault dir)

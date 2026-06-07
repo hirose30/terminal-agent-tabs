@@ -316,7 +316,120 @@ export class SessionManager {
 		}
 	}
 
-	private buildLaunchCommand(profile: CliProfile, startMode: StartMode, additionalArgs: string[], resumeKey?: string) {
+	/**
+	 * Tier1 (Codex) B3 fix. Codex picks its own session id, so after launching a codex tab we
+	 * watch ~/.codex/sessions for the rollout this spawn created (cwd match, created at/after
+	 * the spawn time) and record its id on the session. getState() then persists it so restore
+	 * can `codex resume <id>` instead of `--last`. Best-effort: any failure leaves the prior id
+	 * intact and restore falls back to `--last` (no regression). Re-runs on resume too, so a
+	 * fork-on-resume id is picked up; an append-on-resume keeps the existing id.
+	 */
+	private async captureCodexSessionId(session: Session, cwd: string, sinceMs: number): Promise<void> {
+		let realCwd = cwd;
+		try { realCwd = fs.realpathSync(cwd); } catch { /* use raw path */ }
+		const deadlineMs = Date.now() + 15000;
+		while (Date.now() < deadlineMs) {
+			// Stop if the tab/session went away (closed before the rollout appeared).
+			if (this.sessions.get(session.sessionId) !== session) return;
+			const id = this.findNewestCodexRollout(realCwd, sinceMs);
+			if (id) {
+				if (id !== session.codexSessionId) {
+					session.codexSessionId = id;
+					try { this.plugin.app.workspace.requestSaveLayout(); } catch { /* ignore */ }
+					this.notifyChange();
+				}
+				return;
+			}
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+		}
+	}
+
+	/** Newest codex rollout id for `realCwd` whose session was created at/after `sinceMs`, or null. */
+	private findNewestCodexRollout(realCwd: string, sinceMs: number): string | null {
+		try {
+			const root = path.join(os.homedir(), '.codex', 'sessions');
+			let bestId: string | null = null;
+			let bestTs = sinceMs;
+			for (const dir of this.recentCodexDayDirs(root, 2)) {
+				let entries: string[];
+				try { entries = fs.readdirSync(dir); } catch { continue; }
+				for (const name of entries) {
+					if (!name.startsWith('rollout-') || !name.endsWith('.jsonl')) continue;
+					const file = path.join(dir, name);
+					try {
+						if (fs.statSync(file).mtimeMs < sinceMs - 2000) continue; // cheap pre-filter
+					} catch { continue; }
+					const meta = this.readCodexSessionMeta(file);
+					if (!meta?.id || !meta.cwd) continue;
+					let metaCwd = meta.cwd;
+					try { metaCwd = fs.realpathSync(meta.cwd); } catch { /* use raw */ }
+					if (metaCwd !== realCwd) continue;
+					const ts = Date.parse(meta.timestamp ?? '');
+					if (!Number.isFinite(ts) || ts < sinceMs) continue;
+					if (ts >= bestTs) { bestTs = ts; bestId = meta.id; }
+				}
+			}
+			return bestId;
+		} catch {
+			return null;
+		}
+	}
+
+	/** Up to `limit` newest day directories (YYYY/MM/DD) under the codex sessions root. */
+	private recentCodexDayDirs(root: string, limit: number): string[] {
+		const newestDirs = (dir: string, take: number): string[] => {
+			try {
+				return fs.readdirSync(dir, { withFileTypes: true })
+					.filter((e) => e.isDirectory())
+					.map((e) => e.name)
+					.sort()
+					.reverse()
+					.slice(0, take);
+			} catch {
+				return [];
+			}
+		};
+		const result: string[] = [];
+		for (const y of newestDirs(root, 1)) {
+			const yDir = path.join(root, y);
+			for (const m of newestDirs(yDir, 1)) {
+				const mDir = path.join(yDir, m);
+				for (const d of newestDirs(mDir, limit)) {
+					result.push(path.join(mDir, d));
+				}
+			}
+		}
+		return result;
+	}
+
+	/** Parse a codex rollout's first line (the `session_meta` record). Bounded read; null on failure. */
+	private readCodexSessionMeta(file: string): { id?: string; cwd?: string; timestamp?: string } | null {
+		let fd: number | null = null;
+		try {
+			fd = fs.openSync(file, 'r');
+			const buf = Buffer.alloc(262144);
+			const bytes = fs.readSync(fd, buf, 0, buf.length, 0);
+			const text = buf.toString('utf8', 0, bytes);
+			const nl = text.indexOf('\n');
+			const firstLine = nl >= 0 ? text.slice(0, nl) : text;
+			const obj = JSON.parse(firstLine) as { type?: string; timestamp?: string; payload?: Record<string, unknown> };
+			if (obj?.type !== 'session_meta' || !obj.payload) return null;
+			const p = obj.payload;
+			return {
+				id: typeof p.id === 'string' ? p.id : undefined,
+				cwd: typeof p.cwd === 'string' ? p.cwd : undefined,
+				timestamp: typeof p.timestamp === 'string' ? p.timestamp : obj.timestamp
+			};
+		} catch {
+			return null;
+		} finally {
+			if (fd !== null) {
+				try { fs.closeSync(fd); } catch { /* ignore */ }
+			}
+		}
+	}
+
+	private buildLaunchCommand(profile: CliProfile, startMode: StartMode, additionalArgs: string[], resumeKey?: string, codexSessionId?: string) {
 		const strategy = this.resolveResumeStrategy(profile);
 		const legacyCanResume = profile.supportsResume && profile.resumeArgs.length > 0;
 		const canResume = strategy === 'assign-id' || strategy === 'continue-latest' || legacyCanResume;
@@ -331,9 +444,13 @@ export class SessionManager {
 				? [...base, '--resume', resumeKey]
 				: [...base, '--session-id', resumeKey];
 		} else if (strategy === 'continue-latest' && startMode === 'continue') {
-			// Tier1 (Codex): resume the most recent session scoped to the cwd. Global/default
-			// args must precede the `resume` subcommand (hookArgs is empty for codex).
-			coreArgs = [...base, 'resume', '--last'];
+			// Tier1 (Codex): resume this tab's exact prior session by id when we captured one,
+			// so two codex tabs in the same cwd don't both grab `--last` (which would collapse
+			// them onto the same most-recent session). Fall back to `--last` when no id is known.
+			// Global/default args must precede the `resume` subcommand (hookArgs is empty for codex).
+			coreArgs = codexSessionId
+				? [...base, 'resume', codexSessionId]
+				: [...base, 'resume', '--last'];
 		} else if (startMode === 'continue' && legacyCanResume) {
 			// Legacy interactive resume (e.g. picker) for profiles without a Tier1 strategy.
 			coreArgs = [...base, ...profile.resumeArgs];
@@ -429,7 +546,8 @@ export class SessionManager {
 		startMode: StartMode = 'new',
 		launchConfig?: Partial<TabLaunchConfig>,
 		cwd?: string,
-		resumeKey?: string
+		resumeKey?: string,
+		codexSessionId?: string
 	): Session {
 		const resolvedLaunchConfig = this.resolveLaunchConfig(launchConfig);
 		// Phase 1 (Tier0): launch in the persisted/requested cwd, defaulting to the vault.
@@ -447,7 +565,8 @@ export class SessionManager {
 			profile,
 			startMode,
 			resolvedLaunchConfig.additionalArgs,
-			resumeKey
+			resumeKey,
+			codexSessionId
 		);
 
 		const commandPath = launchCommand.executablePath;
@@ -507,6 +626,8 @@ export class SessionManager {
 			cliId: profile.id,
 			supportsResume: launchCommand.supportsResume,
 			launchCwd,
+			// Seed with the restored id (if any); the post-launch capture below refreshes it.
+			codexSessionId,
 			tabLaunchConfig: resolvedLaunchConfig,
 			debugLogPath: debugTarget?.logPath,
 			debugStream: debugTarget?.stream ?? null
@@ -515,6 +636,12 @@ export class SessionManager {
 		this.sessions.set(sessionId, session);
 		this.lastActiveSessionId = sessionId;
 		this.notifyChange();
+
+		// Tier1 (Codex) B3 fix: codex assigns its own session id, so capture the id this spawn
+		// just created and store it on the session for restore-by-id. Best-effort, async.
+		if (this.resolveResumeStrategy(profile) === 'continue-latest') {
+			void this.captureCodexSessionId(session, launchCwd, Date.now() - 1000);
+		}
 
 		if (childProcess.stdout) {
 			childProcess.stdout.on('data', (data: Buffer) => {

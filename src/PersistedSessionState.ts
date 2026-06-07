@@ -30,13 +30,20 @@ export interface PersistedSessionState {
 	additionalArgs: string[];
 	/** Tier1 resume key (e.g. Claude's --session-id uuid). Absent for strategies that don't need one. */
 	resumeKey?: string;
+	/**
+	 * Tier1 (Codex) captured session id. Codex assigns its own id, so we record the one this
+	 * tab's session created and resume it by id (`codex resume <id>`) instead of `--last` —
+	 * otherwise two codex tabs in the same cwd would both grab the most-recent session.
+	 */
+	codexSessionId?: string;
 }
 
 /** Build a serializable persisted-state object from the live launch config + cwd. */
 export function buildPersistedSessionState(
 	launchConfig: Pick<TabLaunchConfig, 'cliId' | 'additionalArgs'>,
 	cwd: string,
-	resumeKey?: string
+	resumeKey?: string,
+	codexSessionId?: string
 ): PersistedSessionState {
 	const state: PersistedSessionState = {
 		v: PERSISTED_SESSION_STATE_VERSION,
@@ -49,6 +56,10 @@ export function buildPersistedSessionState(
 	const trimmedKey = resumeKey?.trim();
 	if (isSafeResumeKey(trimmedKey)) {
 		state.resumeKey = trimmedKey;
+	}
+	const trimmedCodex = codexSessionId?.trim();
+	if (isSafeResumeKey(trimmedCodex)) {
+		state.codexSessionId = trimmedCodex;
 	}
 	return state;
 }
@@ -79,6 +90,10 @@ export function parsePersistedSessionState(raw: unknown): PersistedSessionState 
 	const rk = typeof obj.resumeKey === 'string' ? obj.resumeKey.trim() : '';
 	if (isSafeResumeKey(rk)) {
 		result.resumeKey = rk;
+	}
+	const cs = typeof obj.codexSessionId === 'string' ? obj.codexSessionId.trim() : '';
+	if (isSafeResumeKey(cs)) {
+		result.codexSessionId = cs;
 	}
 	return result;
 }

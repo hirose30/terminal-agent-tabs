@@ -61,6 +61,8 @@ export class ClaudeSessionView extends ItemView {
 	private liveCwd: string | null = null;
 	// Tier1 resume key (Phase 2): Claude's --session-id. Persisted, reused to --resume on restore.
 	private resumeKey: string | null = null;
+	// Tier1 (Codex): captured codex session id, persisted and reused for `codex resume <id>`.
+	private codexSessionId: string | null = null;
 	// Launch config captured from a pending new-tab open (consumed synchronously in onOpen).
 	private pendingLaunchConfigCaptured: Partial<TabLaunchConfig> | null = null;
 	private osc52Disposer: { dispose: () => void } | null = null;
@@ -107,12 +109,14 @@ export class ClaudeSessionView extends ItemView {
 		const session = this.plugin.sessionManager.getSession(this.sessionId);
 		// Phase 3: a live cwd (OSC 7) wins over the launch cwd so restore returns to where the user is.
 		const cwd = this.liveCwd ?? session?.launchCwd ?? this.launchCwd ?? this.restoredCwd ?? null;
+		// The live session's captured codex id (refreshed post-launch) wins over the restored one.
+		const codexSessionId = session?.codexSessionId ?? this.codexSessionId ?? undefined;
 		const state: Record<string, unknown> = {
 			...base,
 			initialLaunchConfig: { cliId, additionalArgs }
 		};
 		if (cwd) {
-			Object.assign(state, buildPersistedSessionState({ cliId, additionalArgs }, cwd, this.resumeKey ?? undefined));
+			Object.assign(state, buildPersistedSessionState({ cliId, additionalArgs }, cwd, this.resumeKey ?? undefined, codexSessionId));
 		}
 		return state;
 	}
@@ -127,6 +131,7 @@ export class ClaudeSessionView extends ItemView {
 			};
 			this.restoredCwd = persisted.cwd;
 			this.resumeKey = persisted.resumeKey ?? null;
+			this.codexSessionId = persisted.codexSessionId ?? null;
 		} else {
 			const launchConfig = stateObj?.initialLaunchConfig;
 			if (launchConfig && typeof launchConfig === 'object') {
@@ -788,6 +793,8 @@ export class ClaudeSessionView extends ItemView {
 		// --session-id (assign-id strategy) and as the scrollback key (all profiles).
 		if (effectiveStartMode === 'new') {
 			this.resumeKey = crypto.randomUUID();
+			// A fresh codex session will be captured post-launch; drop any restored id.
+			this.codexSessionId = null;
 		}
 
 		try {
@@ -821,7 +828,8 @@ export class ClaudeSessionView extends ItemView {
 				effectiveStartMode,
 				launchConfig,
 				cwd,
-				this.resumeKey ?? undefined
+				this.resumeKey ?? undefined,
+				this.codexSessionId ?? undefined
 			);
 
 			this.plugin.sessionManager.updateSessionTerminal(this.sessionId, this.terminal, this.fitAddon);

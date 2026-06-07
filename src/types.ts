@@ -47,6 +47,8 @@ export interface Session {
 	supportsResume: boolean;
 	/** Working directory the session was spawned in (Phase 1: persisted for cwd restore). */
 	launchCwd: string;
+	/** Tier1 (Codex) captured session id for this live session; persisted for `codex resume <id>`. */
+	codexSessionId?: string;
 	tabLaunchConfig?: TabLaunchConfig;
 	lastOutputLine?: string;
 	debugLogPath?: string;
