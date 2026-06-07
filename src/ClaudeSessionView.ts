@@ -110,7 +110,11 @@ export class ClaudeSessionView extends ItemView {
 		// Phase 3: a live cwd (OSC 7) wins over the launch cwd so restore returns to where the user is.
 		const cwd = this.liveCwd ?? session?.launchCwd ?? this.launchCwd ?? this.restoredCwd ?? null;
 		// The live session's captured codex id (refreshed post-launch) wins over the restored one.
-		const codexSessionId = session?.codexSessionId ?? this.codexSessionId ?? undefined;
+		const codexSessionId =
+			session?.codexSessionId ??
+			this.plugin.sessionManager.getRetainedCodexSessionId(this.sessionId) ??
+			this.codexSessionId ??
+			undefined;
 		const state: Record<string, unknown> = {
 			...base,
 			initialLaunchConfig: { cliId, additionalArgs }
@@ -123,6 +127,24 @@ export class ClaudeSessionView extends ItemView {
 
 	async setState(state: unknown, result: ViewStateResult): Promise<void> {
 		const stateObj = state as Record<string, unknown> | null | undefined;
+		this.applyStateObject(stateObj);
+		if (this.isDebugEnabled()) {
+			console.debug(
+				'[TerminalAgentTabs] setState: restoredCwd=', this.restoredCwd,
+				'cliId=', this.initialLaunchConfigFromState?.cliId,
+				'resumeKey=', this.resumeKey
+			);
+		}
+		await super.setState(state, result);
+
+		// Persisted cwd/resumeKey are now applied; release the restore-start gate. For deferred
+		// tabs this is what lets startInitialSession see the restored values (fixes the race
+		// where onLayoutReady fired before setState and the tab started fresh).
+		this.viewStateApplied = true;
+		this.maybeStartInitialSession();
+	}
+
+	private applyStateObject(stateObj: Record<string, unknown> | null | undefined): void {
 		const persisted = parsePersistedSessionState(stateObj);
 		if (persisted) {
 			this.initialLaunchConfigFromState = {
@@ -144,20 +166,17 @@ export class ClaudeSessionView extends ItemView {
 						: null;
 			}
 		}
-		if (this.isDebugEnabled()) {
-			console.debug(
-				'[TerminalAgentTabs] setState: restoredCwd=', this.restoredCwd,
-				'cliId=', this.initialLaunchConfigFromState?.cliId,
-				'resumeKey=', this.resumeKey
-			);
-		}
-		await super.setState(state, result);
+	}
 
-		// Persisted cwd/resumeKey are now applied; release the restore-start gate. For deferred
-		// tabs this is what lets startInitialSession see the restored values (fixes the race
-		// where onLayoutReady fired before setState and the tab started fresh).
-		this.viewStateApplied = true;
-		this.maybeStartInitialSession();
+	private applyPersistedStateFromLeafState(): boolean {
+		try {
+			const state = this.leaf.getViewState().state as Record<string, unknown> | null | undefined;
+			if (!parsePersistedSessionState(state)) return false;
+			this.applyStateObject(state);
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	private getInitialLaunchConfigFromLeafState(): Partial<TabLaunchConfig> | null {
@@ -297,6 +316,10 @@ export class ClaudeSessionView extends ItemView {
 			if (!this.initialSessionStarted) {
 				window.setTimeout(() => {
 					if (this.initialSessionStarted) return;
+					const appliedPersistedState = this.applyPersistedStateFromLeafState();
+					if (appliedPersistedState && this.debugEnabled) {
+						console.debug('[TerminalAgentTabs] Applied persisted state from leaf before safety-start.');
+					}
 					this.viewStateApplied = true;
 					this.maybeStartInitialSession();
 				}, 150);
@@ -829,7 +852,10 @@ export class ClaudeSessionView extends ItemView {
 				launchConfig,
 				cwd,
 				this.resumeKey ?? undefined,
-				this.codexSessionId ?? undefined
+				this.codexSessionId ?? undefined,
+				(capturedCodexSessionId: string) => {
+					this.codexSessionId = capturedCodexSessionId;
+				}
 			);
 
 			this.plugin.sessionManager.updateSessionTerminal(this.sessionId, this.terminal, this.fitAddon);

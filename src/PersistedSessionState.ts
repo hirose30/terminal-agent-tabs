@@ -23,6 +23,11 @@ export function isSafeResumeKey(value: unknown): value is string {
 	return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 }
 
+/** Codex session ids are passed as CLI arguments, not used as filenames. */
+export function isSafeCliSessionId(value: unknown): value is string {
+	return typeof value === 'string' && /^[A-Za-z0-9_.-]{1,256}$/.test(value);
+}
+
 export interface PersistedSessionState {
 	v: typeof PERSISTED_SESSION_STATE_VERSION;
 	cliId: string;
@@ -58,7 +63,7 @@ export function buildPersistedSessionState(
 		state.resumeKey = trimmedKey;
 	}
 	const trimmedCodex = codexSessionId?.trim();
-	if (isSafeResumeKey(trimmedCodex)) {
+	if (isSafeCliSessionId(trimmedCodex)) {
 		state.codexSessionId = trimmedCodex;
 	}
 	return state;
@@ -92,7 +97,7 @@ export function parsePersistedSessionState(raw: unknown): PersistedSessionState 
 		result.resumeKey = rk;
 	}
 	const cs = typeof obj.codexSessionId === 'string' ? obj.codexSessionId.trim() : '';
-	if (isSafeResumeKey(cs)) {
+	if (isSafeCliSessionId(cs)) {
 		result.codexSessionId = cs;
 	}
 	return result;

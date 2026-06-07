@@ -8,6 +8,7 @@ import { FileSystemAdapter } from 'obsidian';
 import type ClaudeCodeTabsPlugin from './main';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
+import { CodexSessionCapture } from './CodexSessionCapture';
 import type {
 	Session,
 	StartMode,
@@ -21,6 +22,7 @@ export const SPECIAL_CLI_ID_DEFAULT_SHELL = '__default_shell__';
 
 /** Phase 4: cap persisted scrollback to keep plugin-dir files small. */
 const SCROLLBACK_MAX_CHARS = 400_000;
+const DROPPED_SESSION_METADATA_TTL_MS = 5 * 60 * 1000;
 
 export type SessionChangeCallback = () => void;
 
@@ -41,12 +43,20 @@ export class SessionManager {
 	private vaultPath: string;
 	private pluginDir: string;
 	private changeListeners: Set<SessionChangeCallback> = new Set();
+	private codexCapture: CodexSessionCapture;
+	private codexSessionClaims: Map<string, string> = new Map();
+	private droppedSessionMetadata: Map<string, { codexSessionId: string; expiresAt: number }> = new Map();
 
 	constructor(plugin: ClaudeCodeTabsPlugin) {
 		this.plugin = plugin;
 		const adapter = this.plugin.app.vault.adapter;
 		this.vaultPath = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : '';
 		this.pluginDir = this.resolvePluginDir();
+		this.codexCapture = new CodexSessionCapture({
+			debug: (message, error) => {
+				if (this.isDebugEnabled()) console.debug(message, error);
+			}
+		});
 		this.writeShellIntegration();
 	}
 
@@ -216,6 +226,16 @@ export class SessionManager {
 	}
 
 	private dropSession(sessionId: string): void {
+		const session = this.sessions.get(sessionId);
+		if (session?.codexSessionId) {
+			this.droppedSessionMetadata.set(sessionId, {
+				codexSessionId: session.codexSessionId,
+				expiresAt: Date.now() + DROPPED_SESSION_METADATA_TTL_MS
+			});
+		}
+		for (const [codexSessionId, ownerSessionId] of this.codexSessionClaims) {
+			if (ownerSessionId === sessionId) this.codexSessionClaims.delete(codexSessionId);
+		}
 		this.sessions.delete(sessionId);
 		if (this.lastActiveSessionId === sessionId) {
 			this.lastActiveSessionId = null;
@@ -324,17 +344,30 @@ export class SessionManager {
 	 * intact and restore falls back to `--last` (no regression). Re-runs on resume too, so a
 	 * fork-on-resume id is picked up; an append-on-resume keeps the existing id.
 	 */
-	private async captureCodexSessionId(session: Session, cwd: string, sinceMs: number): Promise<void> {
-		let realCwd = cwd;
-		try { realCwd = fs.realpathSync(cwd); } catch { /* use raw path */ }
+	private async captureCodexSessionId(
+		session: Session,
+		cwd: string,
+		sinceMs: number,
+		baselineIds: ReadonlySet<string>,
+		onCaptured?: (codexSessionId: string) => void
+	): Promise<void> {
+		const realCwd = this.codexCapture.resolveRealCwd(cwd);
 		const deadlineMs = Date.now() + 15000;
 		while (Date.now() < deadlineMs) {
 			// Stop if the tab/session went away (closed before the rollout appeared).
 			if (this.sessions.get(session.sessionId) !== session) return;
-			const id = this.findNewestCodexRollout(realCwd, sinceMs);
+			const id = this.codexCapture.findNewRolloutId(
+				realCwd,
+				sinceMs,
+				baselineIds,
+				this.getClaimedCodexSessionIds(session.sessionId)
+			);
 			if (id) {
 				if (id !== session.codexSessionId) {
+					if (session.codexSessionId) this.codexSessionClaims.delete(session.codexSessionId);
 					session.codexSessionId = id;
+					this.codexSessionClaims.set(id, session.sessionId);
+					onCaptured?.(id);
 					try { this.plugin.app.workspace.requestSaveLayout(); } catch { /* ignore */ }
 					this.notifyChange();
 				}
@@ -344,88 +377,27 @@ export class SessionManager {
 		}
 	}
 
-	/** Newest codex rollout id for `realCwd` whose session was created at/after `sinceMs`, or null. */
-	private findNewestCodexRollout(realCwd: string, sinceMs: number): string | null {
-		try {
-			const root = path.join(os.homedir(), '.codex', 'sessions');
-			let bestId: string | null = null;
-			let bestTs = sinceMs;
-			for (const dir of this.recentCodexDayDirs(root, 2)) {
-				let entries: string[];
-				try { entries = fs.readdirSync(dir); } catch { continue; }
-				for (const name of entries) {
-					if (!name.startsWith('rollout-') || !name.endsWith('.jsonl')) continue;
-					const file = path.join(dir, name);
-					try {
-						if (fs.statSync(file).mtimeMs < sinceMs - 2000) continue; // cheap pre-filter
-					} catch { continue; }
-					const meta = this.readCodexSessionMeta(file);
-					if (!meta?.id || !meta.cwd) continue;
-					let metaCwd = meta.cwd;
-					try { metaCwd = fs.realpathSync(meta.cwd); } catch { /* use raw */ }
-					if (metaCwd !== realCwd) continue;
-					const ts = Date.parse(meta.timestamp ?? '');
-					if (!Number.isFinite(ts) || ts < sinceMs) continue;
-					if (ts >= bestTs) { bestTs = ts; bestId = meta.id; }
-				}
-			}
-			return bestId;
-		} catch {
-			return null;
-		}
-	}
-
-	/** Up to `limit` newest day directories (YYYY/MM/DD) under the codex sessions root. */
-	private recentCodexDayDirs(root: string, limit: number): string[] {
-		const newestDirs = (dir: string, take: number): string[] => {
-			try {
-				return fs.readdirSync(dir, { withFileTypes: true })
-					.filter((e) => e.isDirectory())
-					.map((e) => e.name)
-					.sort()
-					.reverse()
-					.slice(0, take);
-			} catch {
-				return [];
-			}
-		};
-		const result: string[] = [];
-		for (const y of newestDirs(root, 1)) {
-			const yDir = path.join(root, y);
-			for (const m of newestDirs(yDir, 1)) {
-				const mDir = path.join(yDir, m);
-				for (const d of newestDirs(mDir, limit)) {
-					result.push(path.join(mDir, d));
-				}
+	private getClaimedCodexSessionIds(currentSessionId: string): Set<string> {
+		this.pruneDroppedSessionMetadata();
+		const ids = new Set<string>();
+		for (const session of this.sessions.values()) {
+			if (session.sessionId !== currentSessionId && session.codexSessionId) {
+				ids.add(session.codexSessionId);
 			}
 		}
-		return result;
+		for (const [codexSessionId, ownerSessionId] of this.codexSessionClaims) {
+			if (ownerSessionId !== currentSessionId) ids.add(codexSessionId);
+		}
+		for (const [sessionId, metadata] of this.droppedSessionMetadata) {
+			if (sessionId !== currentSessionId) ids.add(metadata.codexSessionId);
+		}
+		return ids;
 	}
 
-	/** Parse a codex rollout's first line (the `session_meta` record). Bounded read; null on failure. */
-	private readCodexSessionMeta(file: string): { id?: string; cwd?: string; timestamp?: string } | null {
-		let fd: number | null = null;
-		try {
-			fd = fs.openSync(file, 'r');
-			const buf = Buffer.alloc(262144);
-			const bytes = fs.readSync(fd, buf, 0, buf.length, 0);
-			const text = buf.toString('utf8', 0, bytes);
-			const nl = text.indexOf('\n');
-			const firstLine = nl >= 0 ? text.slice(0, nl) : text;
-			const obj = JSON.parse(firstLine) as { type?: string; timestamp?: string; payload?: Record<string, unknown> };
-			if (obj?.type !== 'session_meta' || !obj.payload) return null;
-			const p = obj.payload;
-			return {
-				id: typeof p.id === 'string' ? p.id : undefined,
-				cwd: typeof p.cwd === 'string' ? p.cwd : undefined,
-				timestamp: typeof p.timestamp === 'string' ? p.timestamp : obj.timestamp
-			};
-		} catch {
-			return null;
-		} finally {
-			if (fd !== null) {
-				try { fs.closeSync(fd); } catch { /* ignore */ }
-			}
+	private pruneDroppedSessionMetadata(): void {
+		const now = Date.now();
+		for (const [sessionId, metadata] of this.droppedSessionMetadata) {
+			if (metadata.expiresAt <= now) this.droppedSessionMetadata.delete(sessionId);
 		}
 	}
 
@@ -547,7 +519,8 @@ export class SessionManager {
 		launchConfig?: Partial<TabLaunchConfig>,
 		cwd?: string,
 		resumeKey?: string,
-		codexSessionId?: string
+		codexSessionId?: string,
+		onCodexSessionIdCaptured?: (codexSessionId: string) => void
 	): Session {
 		const resolvedLaunchConfig = this.resolveLaunchConfig(launchConfig);
 		// Phase 1 (Tier0): launch in the persisted/requested cwd, defaulting to the vault.
@@ -561,6 +534,14 @@ export class SessionManager {
 			launchCwd = this.vaultPath;
 		}
 		const profile = this.resolveCliProfile(resolvedLaunchConfig.cliId);
+		const captureCodexSession = this.resolveResumeStrategy(profile) === 'continue-latest';
+		const codexCaptureStartMs = Date.now();
+		const codexBaselineIds = captureCodexSession
+			? this.codexCapture.snapshotRolloutIds(
+				this.codexCapture.resolveRealCwd(launchCwd),
+				codexCaptureStartMs - 2000
+			)
+			: new Set<string>();
 		const launchCommand = this.buildLaunchCommand(
 			profile,
 			startMode,
@@ -639,8 +620,18 @@ export class SessionManager {
 
 		// Tier1 (Codex) B3 fix: codex assigns its own session id, so capture the id this spawn
 		// just created and store it on the session for restore-by-id. Best-effort, async.
-		if (this.resolveResumeStrategy(profile) === 'continue-latest') {
-			void this.captureCodexSessionId(session, launchCwd, Date.now() - 1000);
+		if (captureCodexSession) {
+			void this.captureCodexSessionId(
+				session,
+				launchCwd,
+				codexCaptureStartMs,
+				codexBaselineIds,
+				onCodexSessionIdCaptured
+			).catch((error) => {
+				if (this.isDebugEnabled()) {
+					console.debug('[TerminalAgentTabs] Codex session id capture failed:', error);
+				}
+			});
 		}
 
 		if (childProcess.stdout) {
@@ -767,6 +758,11 @@ export class SessionManager {
 
 	getSession(sessionId: string): Session | undefined {
 		return this.sessions.get(sessionId);
+	}
+
+	getRetainedCodexSessionId(sessionId: string): string | undefined {
+		this.pruneDroppedSessionMetadata();
+		return this.droppedSessionMetadata.get(sessionId)?.codexSessionId;
 	}
 
 	getAllSessions(): Session[] {
