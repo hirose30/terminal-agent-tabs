@@ -62,7 +62,7 @@ fs.writeFileSync('versions.json', JSON.stringify(v, null, '\t') + '\n');
 "
 
 # 4. CHANGELOG.md stub (insert after the first heading line if not already present)
-if grep -q "${NEW_VERSION}" CHANGELOG.md 2>/dev/null; then
+if awk -v ver="${NEW_VERSION}" '$1 == "##" && $2 == ver { found = 1 } END { exit found ? 0 : 1 }' CHANGELOG.md 2>/dev/null; then
 	echo "CHANGELOG.md already mentions ${NEW_VERSION}; leaving it untouched."
 else
 	TODAY=$(date +%Y-%m-%d)

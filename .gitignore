@@ -38,6 +38,7 @@ data.json
 # spec kit
 .specify/
 .claude/
+.codex/
 specs/
 
 # Build artifacts
