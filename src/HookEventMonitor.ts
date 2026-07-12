@@ -6,6 +6,7 @@
 
 import * as fs from 'fs';
 import type { NotificationType } from './types';
+import { isOverSizeLimit, planRotation, applyRotationPlan } from './HookLogMaintenance';
 
 export interface HookEvent {
 	notificationType: NotificationType;
@@ -26,15 +27,21 @@ export class HookEventMonitor {
 	private pollIntervalMs: number;
 	private debugLogging: boolean;
 	private callback: HookEventCallback;
+	private maxSizeBytes: number;
+	private maxGenerations: number;
 
 	constructor(options: {
 		pollIntervalMs: number;
 		debugLogging: boolean;
 		callback: HookEventCallback;
+		maxSizeBytes?: number;
+		maxGenerations?: number;
 	}) {
 		this.pollIntervalMs = options.pollIntervalMs;
 		this.debugLogging = options.debugLogging;
 		this.callback = options.callback;
+		this.maxSizeBytes = options.maxSizeBytes ?? 0;
+		this.maxGenerations = options.maxGenerations ?? 2;
 	}
 
 	start(filePath: string): void {
@@ -67,9 +74,16 @@ export class HookEventMonitor {
 		this.partialLine = '';
 	}
 
-	updateConfig(options: { pollIntervalMs?: number; debugLogging?: boolean }): void {
+	updateConfig(options: {
+		pollIntervalMs?: number;
+		debugLogging?: boolean;
+		maxSizeBytes?: number;
+		maxGenerations?: number;
+	}): void {
 		if (options.pollIntervalMs !== undefined) this.pollIntervalMs = options.pollIntervalMs;
 		if (options.debugLogging !== undefined) this.debugLogging = options.debugLogging;
+		if (options.maxSizeBytes !== undefined) this.maxSizeBytes = options.maxSizeBytes;
+		if (options.maxGenerations !== undefined) this.maxGenerations = options.maxGenerations;
 	}
 
 	private async poll(): Promise<void> {
@@ -83,6 +97,11 @@ export class HookEventMonitor {
 			if (!stats) {
 				this.readOffset = 0;
 				this.partialLine = '';
+				return;
+			}
+
+			if (isOverSizeLimit(stats.size, this.maxSizeBytes)) {
+				this.rotate();
 				return;
 			}
 
@@ -118,6 +137,20 @@ export class HookEventMonitor {
 		} finally {
 			this.pollInFlight = false;
 		}
+	}
+
+	/** Rotate the active log into generation 1 (shifting older generations up) and reset read state. */
+	private rotate(): void {
+		if (!this.filePath) return;
+		try {
+			applyRotationPlan(this.filePath, planRotation(this.maxGenerations));
+		} catch (error) {
+			if (this.debugLogging) {
+				console.debug('[TerminalAgentTabs] hook log rotation failed:', error);
+			}
+		}
+		this.readOffset = 0;
+		this.partialLine = '';
 	}
 
 	private consumeChunk(chunk: string): void {

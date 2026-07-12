@@ -313,6 +313,64 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 					this.plugin.restartHookEventMonitor();
 				}));
 
+		new Setting(containerEl).setName('Agent event log').setHeading();
+
+		new Setting(containerEl)
+			.setName('Record notification events')
+			.setDesc('Write permission and idle prompts to the event log. Turning this off also disables the related notifications.')
+			.addToggle((toggle) => toggle
+				.setValue(this.plugin.settings.hookLogNotificationEnabled)
+				.onChange(async (value) => {
+					this.plugin.settings.hookLogNotificationEnabled = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Record turn-complete events')
+			.setDesc('Write turn completion events to the event log.')
+			.addToggle((toggle) => toggle
+				.setValue(this.plugin.settings.hookLogStopEnabled)
+				.onChange(async (value) => {
+					this.plugin.settings.hookLogStopEnabled = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Record tool-use events')
+			.setDesc('Write an entry every time a tool runs. Very high frequency and the largest contributor to log growth, so this is off by default.')
+			.addToggle((toggle) => toggle
+				.setValue(this.plugin.settings.hookLogPreToolUseEnabled)
+				.onChange(async (value) => {
+					this.plugin.settings.hookLogPreToolUseEnabled = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Log rotation size')
+			.setDesc('Rotate the event log once it reaches this size, in megabytes.')
+			.addSlider((slider) => slider
+				.setLimits(1, 50, 1)
+				.setValue(this.plugin.settings.hookLogMaxSizeMb)
+				.setDynamicTooltip()
+				.onChange(async (value) => {
+					this.plugin.settings.hookLogMaxSizeMb = value;
+					await this.plugin.saveSettings();
+					this.plugin.restartHookEventMonitor();
+				}));
+
+		new Setting(containerEl)
+			.setName('Log rotation backups to keep')
+			.setDesc('Number of rotated log files to retain before the oldest is deleted.')
+			.addSlider((slider) => slider
+				.setLimits(1, 5, 1)
+				.setValue(this.plugin.settings.hookLogMaxGenerations)
+				.setDynamicTooltip()
+				.onChange(async (value) => {
+					this.plugin.settings.hookLogMaxGenerations = value;
+					await this.plugin.saveSettings();
+					this.plugin.restartHookEventMonitor();
+				}));
+
 		new Setting(containerEl).setName('Send selection').setHeading();
 
 		new Setting(containerEl)

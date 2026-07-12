@@ -66,6 +66,16 @@ export interface ClaudeCodeTabsSettings {
 	enableHookNotificationSound: boolean;
 	hookEventsFilePath: string;
 	hookEventsPollIntervalMs: number;
+	/** Inject the Notification hook (permission/idle prompts) into launched Claude Code sessions. */
+	hookLogNotificationEnabled: boolean;
+	/** Inject the Stop hook (turn completion) into launched Claude Code sessions. */
+	hookLogStopEnabled: boolean;
+	/** Inject the PreToolUse hook. High-frequency; off by default to limit log growth. */
+	hookLogPreToolUseEnabled: boolean;
+	/** Rotate agent-events.jsonl once it reaches this size. */
+	hookLogMaxSizeMb: number;
+	/** Rotated generations to retain (agent-events.jsonl.1 .. .N) before the oldest is deleted. */
+	hookLogMaxGenerations: number;
 	wrapSelectionInCodeBlock: boolean;
 	includeNotePathInSelectionSend: boolean;
 	enableDebugLogging: boolean;
@@ -98,6 +108,11 @@ export const DEFAULT_SETTINGS: ClaudeCodeTabsSettings = {
 	enableHookNotificationSound: false,
 	hookEventsFilePath: '',
 	hookEventsPollIntervalMs: 1500,
+	hookLogNotificationEnabled: true,
+	hookLogStopEnabled: true,
+	hookLogPreToolUseEnabled: false,
+	hookLogMaxSizeMb: 5,
+	hookLogMaxGenerations: 2,
 	wrapSelectionInCodeBlock: false,
 	includeNotePathInSelectionSend: false,
 	enableDebugLogging: false,
