@@ -2,6 +2,27 @@
 
 All notable changes to Terminal Agent Tabs are documented here.
 
+## 1.1.0 - 2026-07-12
+
+### Added
+
+- **Session persistence.** Agent CLI sessions now survive an Obsidian reload
+  or restart: reopening the vault restores each tab's working directory and
+  resumes the underlying CLI session (Claude via `--resume`, Codex via
+  `resume`) instead of starting fresh. Scrollback for recently closed tabs
+  is kept for a couple of weeks so a restored tab isn't blank.
+
+### Fixed
+
+- **Agent event log no longer grows without bound.** The hook event log
+  (`agent-events.jsonl`) used for notifications is now capped: it rotates
+  once it reaches a configurable size (keeping a configurable number of
+  backups), and pre-existing oversized logs are trimmed down automatically
+  the next time the plugin loads. The high-frequency tool-use event type is
+  now off by default (configurable, along with the other event types, under
+  "Agent event log" in settings) since it was the main contributor to log
+  growth.
+
 ## 1.0.2 — 2026-05-24
 
 ### Fixed
