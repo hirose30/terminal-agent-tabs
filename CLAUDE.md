@@ -47,6 +47,14 @@ loader) and written to `<vault>/.obsidian/plugins/terminal-agent-tabs/resources/
 by `ensureEmbeddedResources()` on every plugin load. The release ships only
 those three files; `scripts/release.sh` does not attach the `.py` files.
 
+## Releasing
+
+Public releases go to `hirose30/terminal-agent-tabs` (the `public` remote) via a
+staged, audited flow: `release/<ver>` branch → `prepare-release.sh` → CHANGELOG →
+`audit-release.sh` (gate) → PR → merge → `release.sh` (re-audits, then publishes).
+See **`RELEASING.md`** for the full procedure. Never run `release.sh` without the
+audit passing — it enforces this itself.
+
 ## Development Flow
 - Never push directly to main. Always create a branch and merge via pull request.
 
