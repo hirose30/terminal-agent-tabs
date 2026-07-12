@@ -20,6 +20,7 @@ import {
 	type TabLaunchConfig,
 } from './types';
 import { migrateCliProfiles, type LegacySettingsShape } from './SettingsMigration';
+import { trimLogFileIfOversized } from './HookLogMaintenance';
 
 /** Electron shell/beep API exposed via window.require('electron') in Obsidian desktop */
 interface ElectronShellModule {
@@ -71,8 +72,19 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		this.hookEventMonitor = new HookEventMonitor({
 			pollIntervalMs: this.settings.hookEventsPollIntervalMs,
 			debugLogging: this.settings.enableDebugLogging,
+			maxSizeBytes: this.getHookLogMaxSizeBytes(),
+			maxGenerations: this.settings.hookLogMaxGenerations,
 			callback: (event) => this.handleHookEvent(event)
 		});
+		// Safety valve (D): a pre-existing oversized log (e.g. from before rotation shipped)
+		// won't shrink on its own via rotation, since that only triggers on new growth.
+		try {
+			await trimLogFileIfOversized(this.getEffectiveHookEventsFilePath(), this.getHookLogMaxSizeBytes());
+		} catch (error) {
+			if (this.settings.enableDebugLogging) {
+				console.debug('[TerminalAgentTabs] startup hook log trim failed:', error);
+			}
+		}
 
 		// Auto-generate notifications from terminal output patterns
 		this.outputMonitor.onEvent((sessionId, event) => {
@@ -276,6 +288,20 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 				typeof loaded.hookEventsPollIntervalMs === 'number' && Number.isFinite(loaded.hookEventsPollIntervalMs)
 					? Math.max(250, Math.min(10000, Math.floor(loaded.hookEventsPollIntervalMs)))
 					: DEFAULT_SETTINGS.hookEventsPollIntervalMs,
+			hookLogNotificationEnabled:
+				loaded.hookLogNotificationEnabled ?? DEFAULT_SETTINGS.hookLogNotificationEnabled,
+			hookLogStopEnabled:
+				loaded.hookLogStopEnabled ?? DEFAULT_SETTINGS.hookLogStopEnabled,
+			hookLogPreToolUseEnabled:
+				loaded.hookLogPreToolUseEnabled ?? DEFAULT_SETTINGS.hookLogPreToolUseEnabled,
+			hookLogMaxSizeMb:
+				typeof loaded.hookLogMaxSizeMb === 'number' && Number.isFinite(loaded.hookLogMaxSizeMb) && loaded.hookLogMaxSizeMb > 0
+					? loaded.hookLogMaxSizeMb
+					: DEFAULT_SETTINGS.hookLogMaxSizeMb,
+			hookLogMaxGenerations:
+				typeof loaded.hookLogMaxGenerations === 'number' && Number.isFinite(loaded.hookLogMaxGenerations) && loaded.hookLogMaxGenerations >= 1
+					? Math.floor(loaded.hookLogMaxGenerations)
+					: DEFAULT_SETTINGS.hookLogMaxGenerations,
 			wrapSelectionInCodeBlock:
 				loaded.wrapSelectionInCodeBlock ?? DEFAULT_SETTINGS.wrapSelectionInCodeBlock,
 			includeNotePathInSelectionSend:
@@ -306,10 +332,16 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		return configured || this.getDefaultHookEventsFilePath();
 	}
 
+	getHookLogMaxSizeBytes(): number {
+		return Math.max(1, Math.floor(this.settings.hookLogMaxSizeMb * 1024 * 1024));
+	}
+
 	restartHookEventMonitor(): void {
 		this.hookEventMonitor.updateConfig({
 			pollIntervalMs: this.settings.hookEventsPollIntervalMs,
-			debugLogging: this.settings.enableDebugLogging
+			debugLogging: this.settings.enableDebugLogging,
+			maxSizeBytes: this.getHookLogMaxSizeBytes(),
+			maxGenerations: this.settings.hookLogMaxGenerations
 		});
 		this.hookEventMonitor.start(this.getEffectiveHookEventsFilePath());
 	}

@@ -20,6 +20,11 @@ export interface LegacySettingsShape {
 	enableHookNotificationSound?: boolean;
 	hookEventsFilePath?: string;
 	hookEventsPollIntervalMs?: number;
+	hookLogNotificationEnabled?: boolean;
+	hookLogStopEnabled?: boolean;
+	hookLogPreToolUseEnabled?: boolean;
+	hookLogMaxSizeMb?: number;
+	hookLogMaxGenerations?: number;
 	wrapSelectionInCodeBlock?: boolean;
 	includeNotePathInSelectionSend?: boolean;
 	enableDebugLogging?: boolean;

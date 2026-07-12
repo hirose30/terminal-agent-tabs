@@ -17,6 +17,7 @@ import type {
 	ResumeStrategy
 } from './types';
 import { isSafeResumeKey } from './PersistedSessionState';
+import { buildHookSettingsPayload } from './HookLogMaintenance';
 
 export const SPECIAL_CLI_ID_DEFAULT_SHELL = '__default_shell__';
 
@@ -484,24 +485,18 @@ export class SessionManager {
 		const makeCmd = (hookType: string) =>
 			`python3 "${relayPath}" ${hookType} "${eventsFilePath}"`;
 
-		const settings = {
-			hooks: {
-				Notification: [{
-					matcher: '',
-					hooks: [{ type: 'command', command: makeCmd('notification'), timeout: 10 }]
-				}],
-				Stop: [{
-					matcher: '',
-					hooks: [{ type: 'command', command: makeCmd('stop'), timeout: 10 }]
-				}],
-				PreToolUse: [{
-					matcher: '',
-					hooks: [{ type: 'command', command: makeCmd('pre-tool-use'), timeout: 5 }]
-				}]
-			}
-		};
+		const { hookLogNotificationEnabled, hookLogStopEnabled, hookLogPreToolUseEnabled } = this.plugin.settings;
+		const payload = buildHookSettingsPayload(
+			{
+				notification: hookLogNotificationEnabled,
+				stop: hookLogStopEnabled,
+				preToolUse: hookLogPreToolUseEnabled
+			},
+			makeCmd
+		);
+		if (!payload) return [];
 
-		return ['--settings', JSON.stringify(settings)];
+		return ['--settings', JSON.stringify(payload)];
 	}
 
 	isResumeSupportedForConfig(launchConfig: TabLaunchConfig): boolean {
