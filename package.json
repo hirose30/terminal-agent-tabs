@@ -1,6 +1,6 @@
 {
 	"name": "terminal-agent-tabs",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"description": "Run multiple agent CLI sessions (Claude Code, Codex, Gemini, etc.) as editor tabs.",
 	"main": "main.js",
 	"scripts": {
@@ -25,7 +25,7 @@
 		"builtin-modules": "^3.3.0",
 		"esbuild": "^0.19.0",
 		"eslint": "^9.39.4",
-		"eslint-plugin-obsidianmd": "^0.1.9",
+		"eslint-plugin-obsidianmd": "^0.4.1",
 		"obsidian": "latest",
 		"typescript": "^5.3.0",
 		"typescript-eslint": "^8.57.2",

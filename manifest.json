@@ -1,8 +1,8 @@
 {
 	"id": "terminal-agent-tabs",
 	"name": "Terminal Agent Tabs",
-	"version": "1.1.0",
-	"minAppVersion": "1.0.0",
+	"version": "1.1.1",
+	"minAppVersion": "1.7.2",
 	"description": "Run multiple agent CLI sessions (Claude Code, Codex, Gemini, etc.) as editor tabs.",
 	"author": "hirose30",
 	"authorUrl": "https://github.com/hirose30",

@@ -2,6 +2,21 @@
 
 All notable changes to Terminal Agent Tabs are documented here.
 
+## 1.1.1 - 2026-07-14
+
+### Fixed
+
+- **Obsidian community directory review compliance.** `minAppVersion` is now
+  `1.7.2`, matching the newest Obsidian APIs the plugin actually uses
+  (`Workspace.revealLeaf` as a promise, `ItemView.addAction`). The terminal
+  container background is applied via `setCssStyles` instead of `setCssProps`
+  with a literal property name, per the `no-static-styles-assignment` rule.
+
+### Changed
+
+- Bumped `eslint-plugin-obsidianmd` to `^0.4.1` so local lint matches the
+  directory review bot.
+
 ## 1.1.0 - 2026-07-12
 
 ### Added

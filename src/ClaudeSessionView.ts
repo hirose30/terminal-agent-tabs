@@ -666,7 +666,7 @@ export class ClaudeSessionView extends ItemView {
 
 		// Sync terminal container background with theme (dynamic value from user config)
 		if (this.terminalContainer && theme.background) {
-			this.terminalContainer.setCssProps({ 'background-color': theme.background });
+			this.terminalContainer.setCssStyles({ backgroundColor: theme.background });
 		}
 	}
 
