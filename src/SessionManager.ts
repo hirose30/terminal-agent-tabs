@@ -10,6 +10,7 @@ import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 import { CodexSessionCapture } from './CodexSessionCapture';
 import type {
+	AgentActivityState,
 	Session,
 	StartMode,
 	TabLaunchConfig,
@@ -577,6 +578,8 @@ export class SessionManager {
 				fontSize: this.plugin.settings.defaultFontSize,
 				headerText: defaultHeader,
 				status: 'error',
+				agentActivity: 'unknown',
+				agentActivityChangedAt: null,
 				exitCode: null,
 				createdAt: new Date(),
 				cliId: profile.id,
@@ -597,6 +600,8 @@ export class SessionManager {
 			fontSize: this.plugin.settings.defaultFontSize,
 			headerText: defaultHeader,
 			status: 'running',
+			agentActivity: 'unknown',
+			agentActivityChangedAt: null,
 			exitCode: null,
 			createdAt: new Date(),
 			cliId: profile.id,
@@ -835,6 +840,20 @@ export class SessionManager {
 		if (session) {
 			session.terminal = terminal;
 			session.fitAddon = fitAddon;
+		}
+	}
+
+	/**
+	 * Record the agent's OSC-reported activity. No-ops on same-state re-sets:
+	 * while working, the spinner retitles at high frequency and must not
+	 * trigger a sidebar re-render per frame.
+	 */
+	updateSessionActivity(sessionId: string, state: AgentActivityState): void {
+		const session = this.sessions.get(sessionId);
+		if (session && session.agentActivity !== state) {
+			session.agentActivity = state;
+			session.agentActivityChangedAt = new Date();
+			this.notifyChange();
 		}
 	}
 

@@ -176,7 +176,13 @@ export class SessionSidebarView extends ItemView {
 		// Status dot
 		const statusDot = titleRow.createSpan({ cls: 'claude-sidebar-card-status-dot' });
 		if (status === 'running') {
-			statusDot.addClass('status-running');
+			// Agent activity refines the running dot; idle/unknown keep the
+			// legacy green so CLIs without OSC activity titles look unchanged.
+			if (session?.agentActivity === 'working') {
+				statusDot.addClass('status-working');
+			} else {
+				statusDot.addClass('status-running');
+			}
 		} else if (status === 'error') {
 			statusDot.addClass('status-error');
 		} else {
@@ -238,6 +244,11 @@ export class SessionSidebarView extends ItemView {
 			statusText = `exited (${session?.exitCode ?? '?'})`;
 		}
 		lines.push(`Status: ${statusText}`);
+
+		const activity = session?.agentActivity;
+		if (activity && activity !== 'unknown') {
+			lines.push(`Activity: ${activity}`);
+		}
 
 		if (cliDisplayName) lines.push(`CLI: ${cliDisplayName}`);
 		if (session?.launchCwd) lines.push(`Folder: ${this.shortenHomePath(session.launchCwd)}`);

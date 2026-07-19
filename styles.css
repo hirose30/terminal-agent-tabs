@@ -242,6 +242,21 @@
 	background-color: var(--color-green, #4caf50);
 }
 
+/* Agent is mid-turn (OSC title spinner): pulse a yellow dot. */
+.claude-sidebar-card-status-dot.status-working {
+	background-color: var(--color-yellow, #e5b567);
+	animation: claude-status-working-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes claude-status-working-pulse {
+	0%, 100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.35;
+	}
+}
+
 .claude-sidebar-card-status-dot.status-exited {
 	background-color: var(--text-faint);
 }

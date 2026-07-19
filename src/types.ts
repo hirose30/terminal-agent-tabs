@@ -6,6 +6,14 @@ import type { FitAddon } from '@xterm/addon-fit';
 
 export type SessionStatus = 'running' | 'exited' | 'error';
 
+/**
+ * What the agent inside the terminal is doing, as reported via its OSC title
+ * prefix. Orthogonal to SessionStatus (process liveness): a session can be
+ * 'running' while the agent is idle. 'unknown' means the CLI never emitted a
+ * recognizable prefix (e.g. plain shells), keeping legacy behavior.
+ */
+export type AgentActivityState = 'working' | 'idle' | 'unknown';
+
 export type StartMode = 'new' | 'continue';
 
 /**
@@ -49,6 +57,8 @@ export interface Session {
 	fontSize: number;
 	headerText: string;
 	status: SessionStatus;
+	agentActivity: AgentActivityState;
+	agentActivityChangedAt: Date | null;
 	exitCode: number | null;
 	createdAt: Date;
 	cliId: string;

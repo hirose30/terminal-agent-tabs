@@ -6,7 +6,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { SerializeAddon } from '@xterm/addon-serialize';
 import type ClaudeCodeTabsPlugin from './main';
 import type { StartMode, TabLaunchConfig } from './types';
-import { OscParser } from './OscParser';
+import { OscParser, parseTitleActivity } from './OscParser';
 import { buildTerminalTheme, increaseFontSize, decreaseFontSize } from './TerminalTheme';
 import { buildPersistedSessionState, parsePersistedSessionState } from './PersistedSessionState';
 import { stripPrivateModeSequences } from './utils';
@@ -546,7 +546,14 @@ export class ClaudeSessionView extends ItemView {
 	}
 
 	private updateHeaderText(title: string): void {
-		this.headerText = title || this.headerText || 'Coding Session';
+		// Titles reach here from both xterm's onTitleChange and the OscParser
+		// path; peel the activity prefix off in one place so tab/header text
+		// stays clean and the state lands on the session either way.
+		const { state, cleanTitle } = parseTitleActivity(title);
+		if (state) {
+			this.plugin.sessionManager.updateSessionActivity(this.sessionId, state);
+		}
+		this.headerText = cleanTitle || this.headerText || 'Coding Session';
 		(this.leaf as LeafWithTabHeader).updateHeader?.();
 		this.plugin.sessionManager.updateSessionHeader(this.sessionId, this.headerText);
 		this.updateTabBadge();
