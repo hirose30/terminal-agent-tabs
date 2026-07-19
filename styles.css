@@ -197,10 +197,10 @@
 }
 
 .claude-sidebar-card {
-	padding: 10px 12px;
+	padding: 6px 10px;
 	cursor: pointer;
 	border-radius: 6px;
-	margin: 2px 4px;
+	margin: 1px 4px;
 	transition: background 0.1s ease;
 }
 
@@ -213,8 +213,7 @@
 	color: var(--text-on-accent);
 }
 
-.claude-sidebar-card.is-active .claude-sidebar-card-subtitle,
-.claude-sidebar-card.is-active .claude-sidebar-card-context {
+.claude-sidebar-card.is-active .claude-sidebar-card-subtitle {
 	color: var(--text-on-accent);
 	opacity: 0.8;
 }
@@ -228,7 +227,7 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	margin-bottom: 4px;
+	margin-bottom: 2px;
 }
 
 .claude-sidebar-card-status-dot {
@@ -257,59 +256,24 @@
 	color: var(--text-normal);
 	flex: 1;
 	min-width: 0;
-	word-break: break-word;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .claude-sidebar-card.is-active .claude-sidebar-card-title {
 	color: var(--text-on-accent);
 }
 
-/* Card subtitle (latest message) */
+/* Card subtitle (latest message, normal density only) */
 .claude-sidebar-card-subtitle {
 	font-size: 12px;
 	color: var(--text-muted);
 	line-height: 1.4;
-	margin-bottom: 4px;
 	display: -webkit-box;
-	-webkit-line-clamp: 2;
+	-webkit-line-clamp: 1;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
-}
-
-/* Card status label (Needs input, Complete) */
-.claude-sidebar-card-status-label {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	font-size: 11px;
-	font-weight: 600;
-	margin-bottom: 4px;
-}
-
-.claude-sidebar-card-status-label svg {
-	width: 13px;
-	height: 13px;
-}
-
-.claude-sidebar-card-status-label.type-action {
-	color: var(--color-orange, #e8a838);
-}
-
-.claude-sidebar-card-status-label.type-complete {
-	color: var(--color-green, #4caf50);
-}
-
-.claude-sidebar-card.is-active .claude-sidebar-card-status-label {
-	color: var(--text-on-accent);
-}
-
-/* Card context line (CLI profile, time) */
-.claude-sidebar-card-context {
-	font-size: 11px;
-	color: var(--text-faint);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
 }
 
 /* Badge */
@@ -372,27 +336,13 @@
 	color: var(--text-on-accent);
 }
 
-/* Density: normal — one-line subtitle, tighter card */
-
-.claude-sidebar-container.is-density-normal .claude-sidebar-card {
-	padding: 6px 10px;
-	margin: 1px 4px;
-}
-
-.claude-sidebar-container.is-density-normal .claude-sidebar-card-title-row {
-	margin-bottom: 2px;
-}
-
-.claude-sidebar-container.is-density-normal .claude-sidebar-card-subtitle {
-	-webkit-line-clamp: 1;
-	margin-bottom: 0;
-}
-
-/* Density: compact — single line, smallest footprint */
+/*
+ * Density: normal is the base look above (one-line subtitle). Compact drops
+ * the subtitle in the DOM and tightens the single title row further.
+ */
 
 .claude-sidebar-container.is-density-compact .claude-sidebar-card {
 	padding: 4px 8px;
-	margin: 1px 4px;
 }
 
 .claude-sidebar-container.is-density-compact .claude-sidebar-card-title-row {
@@ -401,15 +351,6 @@
 
 .claude-sidebar-container.is-density-compact .claude-sidebar-card-title {
 	font-size: 13px;
-}
-
-/* Compact / normal keep the title on a single line so card height stays fixed. */
-.claude-sidebar-container.is-density-compact .claude-sidebar-card-title,
-.claude-sidebar-container.is-density-normal .claude-sidebar-card-title {
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	word-break: normal;
 }
 
 /* ============================================================

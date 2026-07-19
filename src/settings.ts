@@ -189,11 +189,10 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Session list density')
-			.setDesc('How much detail each session shows in the sidebar. Compact fits the most sessions; detailed shows the subtitle, status and context.')
+			.setDesc('How much detail each session shows in the sidebar. Compact fits the most sessions; normal adds a one-line subtitle. Full detail is always on the hover tooltip.')
 			.addDropdown((dropdown) => {
 				dropdown.addOption('compact', 'Compact');
 				dropdown.addOption('normal', 'Normal');
-				dropdown.addOption('detailed', 'Detailed');
 				dropdown
 					.setValue(this.plugin.settings.sessionListDensity)
 					.onChange(async (value) => {

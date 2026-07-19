@@ -17,6 +17,7 @@ import {
 	DEFAULT_SETTINGS,
 	DEFAULT_TERMINAL_FONT_FAMILY,
 	type CliProfile,
+	type SessionListDensity,
 	type TabLaunchConfig,
 } from './types';
 import { migrateCliProfiles, type LegacySettingsShape } from './SettingsMigration';
@@ -268,6 +269,15 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 			? (legacyDefault as string)
 			: (cliProfiles.find((profile) => profile.id === 'claude')?.id || cliProfiles[0].id);
 
+		// 'detailed' was removed; migrate persisted values to 'normal'. Anything
+		// else unrecognized falls back to the default.
+		let sessionListDensity: SessionListDensity = DEFAULT_SETTINGS.sessionListDensity;
+		if (loaded.sessionListDensity === 'compact' || loaded.sessionListDensity === 'normal') {
+			sessionListDensity = loaded.sessionListDensity;
+		} else if (loaded.sessionListDensity === 'detailed') {
+			sessionListDensity = 'normal';
+		}
+
 		this.settings = {
 			defaultFontSize: loaded.defaultFontSize ?? DEFAULT_SETTINGS.defaultFontSize,
 			terminalFontFamily: sanitizeTerminalFontFamily(loaded.terminalFontFamily),
@@ -312,12 +322,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 				typeof loaded.terminalThemeName === 'string'
 					? loaded.terminalThemeName
 					: DEFAULT_SETTINGS.terminalThemeName,
-			sessionListDensity:
-				loaded.sessionListDensity === 'compact'
-					|| loaded.sessionListDensity === 'normal'
-					|| loaded.sessionListDensity === 'detailed'
-					? loaded.sessionListDensity
-					: DEFAULT_SETTINGS.sessionListDensity,
+			sessionListDensity,
 			cliProfiles
 		};
 	}

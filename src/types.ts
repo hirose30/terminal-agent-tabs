@@ -12,9 +12,9 @@ export type StartMode = 'new' | 'continue';
  * How densely the session sidebar renders each session card.
  * - 'compact': single line (status dot + title + trailing status icon).
  * - 'normal': compact plus a one-line subtitle.
- * - 'detailed': full card (two-line subtitle + status label + context line).
+ * Full detail for either mode is always available through the card tooltip.
  */
-export type SessionListDensity = 'compact' | 'normal' | 'detailed';
+export type SessionListDensity = 'compact' | 'normal';
 
 /**
  * Tier1 logical-resume strategy for a CLI profile (Phase 2).

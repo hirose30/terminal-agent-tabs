@@ -1,7 +1,8 @@
+import * as os from 'os';
 import { ItemView, WorkspaceLeaf, setIcon } from 'obsidian';
 import type ClaudeCodeTabsPlugin from './main';
 import { ClaudeSessionView, VIEW_TYPE_CLAUDE_SESSION } from './ClaudeSessionView';
-import type { AgentNotification } from './types';
+import type { AgentNotification, NotificationType } from './types';
 
 export const VIEW_TYPE_SESSION_SIDEBAR = 'claude-session-sidebar';
 
@@ -97,7 +98,7 @@ export class SessionSidebarView extends ItemView {
 		this.contentContainer.empty();
 
 		const density = this.plugin.settings.sessionListDensity;
-		this.contentContainer.removeClass('is-density-compact', 'is-density-normal', 'is-density-detailed');
+		this.contentContainer.removeClass('is-density-compact', 'is-density-normal');
 		this.contentContainer.addClass(`is-density-${density}`);
 
 		this.renderSessionsSection(this.contentContainer);
@@ -153,22 +154,16 @@ export class SessionSidebarView extends ItemView {
 		const statusKind = this.getNotificationStatusKind(latestNotification);
 		const subtitleText = this.getSubtitleText(lastOutputLine, latestNotification, status, session?.exitCode);
 
-		// Context line (CLI profile + elapsed time)
-		const contextParts: string[] = [];
-		if (cliDisplayName) contextParts.push(cliDisplayName);
-		if (session?.createdAt) {
-			contextParts.push(this.formatTimeAgo(session.createdAt));
-		}
-
-		// Always surface the full detail through the card tooltip. The visible rows
-		// are clamped (normal: 1 line, detailed: 2 lines) or omitted (compact), so
-		// the tooltip keeps the un-truncated text available in every density.
-		const tooltipParts: string[] = [];
-		if (subtitleText) tooltipParts.push(subtitleText);
-		if (statusKind === 'action') tooltipParts.push('Needs input');
-		else if (statusKind === 'complete') tooltipParts.push('Complete');
-		if (contextParts.length > 0) tooltipParts.push(contextParts.join(' \u00B7 '));
-		const tooltip = tooltipParts.join('\n');
+		// A labelled, multi-line tooltip carries the full detail neither density can
+		// show: the visible rows are truncated (normal subtitle) or omitted (compact).
+		const tooltip = this.buildCardTooltip(
+			view.getDisplayText(),
+			session,
+			status,
+			cliDisplayName,
+			lastOutputLine,
+			latestNotification
+		);
 
 		const card = container.createDiv({
 			cls: `claude-sidebar-card${isActive ? ' is-active' : ''}`,
@@ -200,39 +195,18 @@ export class SessionSidebarView extends ItemView {
 			cls: 'claude-sidebar-card-title'
 		});
 
-		// Compact/normal collapse the status label into a trailing icon on the title row.
-		if (density !== 'detailed' && statusKind) {
+		// Trailing status icon collapses the "needs input / complete" signal onto the title row.
+		if (statusKind) {
 			const titleStatus = titleRow.createSpan({ cls: `claude-sidebar-card-title-status type-${statusKind}` });
 			setIcon(titleStatus, statusKind === 'action' ? 'alert-triangle' : 'check-circle');
 		}
 
-		// Row 2: Latest output line or notification body (normal + detailed)
-		if (density !== 'compact' && subtitleText) {
+		// Row 2: one-line subtitle (normal only)
+		if (density === 'normal' && subtitleText) {
 			card.createDiv({
 				text: subtitleText,
 				cls: 'claude-sidebar-card-subtitle'
 			});
-		}
-
-		if (density === 'detailed') {
-			// Row 3: Status label (if action needed)
-			if (statusKind === 'action') {
-				const statusLabel = card.createDiv({ cls: 'claude-sidebar-card-status-label type-action' });
-				setIcon(statusLabel, 'alert-triangle');
-				statusLabel.createSpan({ text: 'Needs input' });
-			} else if (statusKind === 'complete') {
-				const statusLabel = card.createDiv({ cls: 'claude-sidebar-card-status-label type-complete' });
-				setIcon(statusLabel, 'check-circle');
-				statusLabel.createSpan({ text: 'Complete' });
-			}
-
-			// Row 4: Context line (CLI profile + time)
-			if (contextParts.length > 0) {
-				card.createDiv({
-					text: contextParts.join(' \u00B7 '),
-					cls: 'claude-sidebar-card-context'
-				});
-			}
 		}
 
 		card.onclick = () => {
@@ -253,6 +227,56 @@ export class SessionSidebarView extends ItemView {
 			return 'complete';
 		}
 		return null;
+	}
+
+	/** Build the labelled, multi-line tooltip shown on hover for a session card. */
+	private buildCardTooltip(
+		displayName: string,
+		session: ReturnType<typeof this.plugin.sessionManager.getSession>,
+		status: string,
+		cliDisplayName: string,
+		lastOutputLine: string,
+		latestNotification: AgentNotification | undefined
+	): string {
+		const lines: string[] = [displayName];
+
+		let statusText = status;
+		if (status === 'exited') {
+			statusText = `exited (${session?.exitCode ?? '?'})`;
+		}
+		lines.push(`Status: ${statusText}`);
+
+		if (cliDisplayName) lines.push(`CLI: ${cliDisplayName}`);
+		if (session?.launchCwd) lines.push(`Folder: ${this.shortenHomePath(session.launchCwd)}`);
+		if (session?.createdAt) lines.push(`Started: ${this.formatTimeAgo(session.createdAt)}`);
+		if (lastOutputLine) lines.push(`Last output: ${lastOutputLine}`);
+
+		if (latestNotification) {
+			const label = this.getNotificationLabel(latestNotification.type);
+			const body = latestNotification.body.length > 200
+				? latestNotification.body.slice(0, 200) + '...'
+				: latestNotification.body;
+			const when = this.formatTimeAgo(latestNotification.timestamp);
+			lines.push(`Latest: [${label}] ${body} (${when})`);
+		}
+
+		return lines.join('\n');
+	}
+
+	private getNotificationLabel(type: NotificationType): string {
+		if (type === 'task_complete') return 'Complete';
+		if (type === 'agent_event') return 'Agent event';
+		// 'action_needed' | 'needs_input'
+		return 'Needs input';
+	}
+
+	/** Replace a leading home-directory path with '~' for compact display. */
+	private shortenHomePath(fsPath: string): string {
+		const home = os.homedir();
+		if (home && (fsPath === home || fsPath.startsWith(`${home}/`))) {
+			return `~${fsPath.slice(home.length)}`;
+		}
+		return fsPath;
 	}
 
 	private getSubtitleText(
