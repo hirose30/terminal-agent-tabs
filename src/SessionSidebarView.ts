@@ -289,7 +289,9 @@ export class SessionSidebarView extends ItemView {
 		// (lastOutputLine is usually Claude Code's status-bar line, so the
 		// notification body is the more useful subtitle when one exists.)
 		if (latestNotification) {
-			return this.toSingleLine(latestNotification.body, 120);
+			// An empty/whitespace-only body must not swallow the lastOutputLine fallback.
+			const body = this.toSingleLine(latestNotification.body, 120);
+			if (body) return body;
 		}
 		if (lastOutputLine) {
 			return lastOutputLine;
