@@ -9,6 +9,14 @@ export type SessionStatus = 'running' | 'exited' | 'error';
 export type StartMode = 'new' | 'continue';
 
 /**
+ * How densely the session sidebar renders each session card.
+ * - 'compact': single line (status dot + title + trailing status icon).
+ * - 'normal': compact plus a one-line subtitle.
+ * Full detail for either mode is always available through the card tooltip.
+ */
+export type SessionListDensity = 'compact' | 'normal';
+
+/**
  * Tier1 logical-resume strategy for a CLI profile (Phase 2).
  * - 'assign-id': assign a deterministic --session-id on launch, resume it by id (Claude).
  * - 'continue-latest': resume the most recent session scoped to the cwd (Codex).
@@ -81,6 +89,8 @@ export interface ClaudeCodeTabsSettings {
 	enableDebugLogging: boolean;
 	defaultCliId: string;
 	terminalThemeName: string;
+	/** How densely the session sidebar renders each session card. */
+	sessionListDensity: SessionListDensity;
 	cliProfiles: CliProfile[];
 }
 
@@ -118,6 +128,7 @@ export const DEFAULT_SETTINGS: ClaudeCodeTabsSettings = {
 	enableDebugLogging: false,
 	defaultCliId: 'claude',
 	terminalThemeName: '',
+	sessionListDensity: 'compact',
 	cliProfiles: [
 		{
 			id: 'claude',

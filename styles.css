@@ -197,10 +197,10 @@
 }
 
 .claude-sidebar-card {
-	padding: 10px 12px;
+	padding: 6px 10px;
 	cursor: pointer;
 	border-radius: 6px;
-	margin: 2px 4px;
+	margin: 1px 4px;
 	transition: background 0.1s ease;
 }
 
@@ -213,8 +213,7 @@
 	color: var(--text-on-accent);
 }
 
-.claude-sidebar-card.is-active .claude-sidebar-card-subtitle,
-.claude-sidebar-card.is-active .claude-sidebar-card-context {
+.claude-sidebar-card.is-active .claude-sidebar-card-subtitle {
 	color: var(--text-on-accent);
 	opacity: 0.8;
 }
@@ -228,7 +227,7 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	margin-bottom: 4px;
+	margin-bottom: 2px;
 }
 
 .claude-sidebar-card-status-dot {
@@ -257,75 +256,24 @@
 	color: var(--text-normal);
 	flex: 1;
 	min-width: 0;
-	word-break: break-word;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .claude-sidebar-card.is-active .claude-sidebar-card-title {
 	color: var(--text-on-accent);
 }
 
-/* Card subtitle (latest message) */
+/* Card subtitle (latest message, normal density only) */
 .claude-sidebar-card-subtitle {
 	font-size: 12px;
 	color: var(--text-muted);
 	line-height: 1.4;
-	margin-bottom: 4px;
 	display: -webkit-box;
-	-webkit-line-clamp: 2;
+	-webkit-line-clamp: 1;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
-}
-
-/* Card status label (Needs input, Complete) */
-.claude-sidebar-card-status-label {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	font-size: 11px;
-	font-weight: 600;
-	margin-bottom: 4px;
-}
-
-.claude-sidebar-card-status-label svg {
-	width: 13px;
-	height: 13px;
-}
-
-.claude-sidebar-card-status-label.type-action {
-	color: var(--color-orange, #e8a838);
-}
-
-.claude-sidebar-card-status-label.type-complete {
-	color: var(--color-green, #4caf50);
-}
-
-.claude-sidebar-card.is-active .claude-sidebar-card-status-label {
-	color: var(--text-on-accent);
-}
-
-/* Card context line (CLI profile, time) */
-.claude-sidebar-card-context {
-	font-size: 11px;
-	color: var(--text-faint);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-/* Badge */
-
-.claude-sidebar-badge {
-	flex-shrink: 0;
-	background: var(--color-red, #e53935);
-	color: #fff;
-	font-size: 10px;
-	font-weight: 600;
-	padding: 0 5px;
-	border-radius: 8px;
-	min-width: 16px;
-	height: 16px;
-	line-height: 16px;
-	text-align: center;
 }
 
 /* Tab Badge (Phase 2) */
@@ -347,73 +295,46 @@
 	vertical-align: middle;
 }
 
-/* Notification List */
+/* Title-row status icon (compact / normal densities) */
 
-.claude-sidebar-notification-list {
-	padding: 4px 0;
-}
-
-.claude-sidebar-notification-item {
-	padding: 8px 12px;
-	cursor: pointer;
-	border-left: 3px solid transparent;
-	margin: 1px 0;
-}
-
-.claude-sidebar-notification-item:hover {
-	background: var(--background-modifier-hover);
-}
-
-.claude-sidebar-notification-item.is-unread {
-	border-left-color: var(--interactive-accent);
-	background: var(--background-secondary-alt, var(--background-secondary));
-}
-
-.claude-sidebar-notification-type-row {
-	display: flex;
+.claude-sidebar-card-title-status {
+	flex-shrink: 0;
+	display: inline-flex;
 	align-items: center;
-	justify-content: space-between;
-	margin-bottom: 2px;
 }
 
-.claude-sidebar-notification-type {
-	font-size: 11px;
-	font-weight: 600;
-	padding: 1px 6px;
-	border-radius: 3px;
+.claude-sidebar-card-title-status svg {
+	width: 14px;
+	height: 14px;
 }
 
-.claude-sidebar-notification-type.type-action {
-	background: var(--color-red, #e53935);
-	color: var(--text-on-accent, #fff);
+.claude-sidebar-card-title-status.type-action {
+	color: var(--color-orange, #e8a838);
 }
 
-.claude-sidebar-notification-type.type-complete {
-	background: var(--color-green, #4caf50);
-	color: var(--text-on-accent, #fff);
+.claude-sidebar-card-title-status.type-complete {
+	color: var(--color-green, #4caf50);
 }
 
-.claude-sidebar-notification-type.type-event {
-	background: var(--color-blue, #2196f3);
-	color: var(--text-on-accent, #fff);
+.claude-sidebar-card.is-active .claude-sidebar-card-title-status {
+	color: var(--text-on-accent);
 }
 
-.claude-sidebar-notification-time {
-	font-size: 10px;
-	color: var(--text-faint);
+/*
+ * Density: normal is the base look above (one-line subtitle). Compact drops
+ * the subtitle in the DOM and tightens the single title row further.
+ */
+
+.claude-sidebar-container.is-density-compact .claude-sidebar-card {
+	padding: 4px 8px;
 }
 
-.claude-sidebar-notification-body {
-	font-size: 12px;
-	color: var(--text-normal);
-	margin-top: 2px;
-	word-break: break-word;
+.claude-sidebar-container.is-density-compact .claude-sidebar-card-title-row {
+	margin-bottom: 0;
 }
 
-.claude-sidebar-notification-source {
-	font-size: 10px;
-	color: var(--text-faint);
-	margin-top: 2px;
+.claude-sidebar-container.is-density-compact .claude-sidebar-card-title {
+	font-size: 13px;
 }
 
 /* ============================================================

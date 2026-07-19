@@ -17,6 +17,7 @@ import {
 	DEFAULT_SETTINGS,
 	DEFAULT_TERMINAL_FONT_FAMILY,
 	type CliProfile,
+	type SessionListDensity,
 	type TabLaunchConfig,
 } from './types';
 import { migrateCliProfiles, type LegacySettingsShape } from './SettingsMigration';
@@ -268,6 +269,15 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 			? (legacyDefault as string)
 			: (cliProfiles.find((profile) => profile.id === 'claude')?.id || cliProfiles[0].id);
 
+		// 'detailed' was removed; migrate persisted values to 'normal'. Anything
+		// else unrecognized falls back to the default.
+		let sessionListDensity: SessionListDensity = DEFAULT_SETTINGS.sessionListDensity;
+		if (loaded.sessionListDensity === 'compact' || loaded.sessionListDensity === 'normal') {
+			sessionListDensity = loaded.sessionListDensity;
+		} else if (loaded.sessionListDensity === 'detailed') {
+			sessionListDensity = 'normal';
+		}
+
 		this.settings = {
 			defaultFontSize: loaded.defaultFontSize ?? DEFAULT_SETTINGS.defaultFontSize,
 			terminalFontFamily: sanitizeTerminalFontFamily(loaded.terminalFontFamily),
@@ -312,6 +322,7 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 				typeof loaded.terminalThemeName === 'string'
 					? loaded.terminalThemeName
 					: DEFAULT_SETTINGS.terminalThemeName,
+			sessionListDensity,
 			cliProfiles
 		};
 	}
@@ -464,6 +475,15 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		for (const leaf of leaves) {
 			if (leaf.view instanceof ClaudeSessionView) {
 				leaf.view.applyTerminalAppearanceSettings(options);
+			}
+		}
+	}
+
+	refreshSessionSidebars(): void {
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_SESSION_SIDEBAR);
+		for (const leaf of leaves) {
+			if (leaf.view instanceof SessionSidebarView) {
+				leaf.view.render();
 			}
 		}
 	}

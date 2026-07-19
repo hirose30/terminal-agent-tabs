@@ -29,6 +29,8 @@ export interface LegacySettingsShape {
 	includeNotePathInSelectionSend?: boolean;
 	enableDebugLogging?: boolean;
 	terminalThemeName?: string;
+	/** Raw persisted density; legacy 'detailed' is migrated in loadSettings. */
+	sessionListDensity?: string;
 }
 
 function dedupeProfiles(profiles: CliProfile[]): CliProfile[] {
