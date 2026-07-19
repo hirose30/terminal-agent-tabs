@@ -8,11 +8,13 @@ export type SessionStatus = 'running' | 'exited' | 'error';
 
 /**
  * What the agent inside the terminal is doing, as reported via its OSC title
- * prefix. Orthogonal to SessionStatus (process liveness): a session can be
- * 'running' while the agent is idle. 'unknown' means the CLI never emitted a
- * recognizable prefix (e.g. plain shells), keeping legacy behavior.
+ * prefix and hook events. Orthogonal to SessionStatus (process liveness): a
+ * session can be 'running' while the agent is idle. 'blocked' means the agent
+ * is waiting for the user's answer (permission prompt etc., via the
+ * Notification hook). 'unknown' means no recognizable signal was ever seen
+ * (e.g. plain shells), keeping legacy behavior.
  */
-export type AgentActivityState = 'working' | 'idle' | 'unknown';
+export type AgentActivityState = 'working' | 'blocked' | 'idle' | 'unknown';
 
 export type StartMode = 'new' | 'continue';
 

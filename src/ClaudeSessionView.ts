@@ -551,7 +551,10 @@ export class ClaudeSessionView extends ItemView {
 		// stays clean and the state lands on the session either way.
 		const { state, cleanTitle } = parseTitleActivity(title);
 		if (state) {
-			this.plugin.sessionManager.updateSessionActivity(this.sessionId, state);
+			this.plugin.sessionManager.updateSessionActivity(
+				this.sessionId,
+				state === 'working' ? 'osc-working' : 'osc-idle'
+			);
 		}
 		this.headerText = cleanTitle || this.headerText || 'Coding Session';
 		(this.leaf as LeafWithTabHeader).updateHeader?.();

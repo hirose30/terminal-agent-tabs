@@ -365,6 +365,20 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		}
 
 		const targetSessionId = this.sessionManager.resolveNotificationSessionId();
+
+		// Drive the agent activity state from the hook stream. Hook events
+		// carry no session id, so the heuristic above can mis-attribute the
+		// event when several sessions run at once. That is self-repairing:
+		// if 'blocked' lands on a session that is actually mid-turn, its next
+		// braille spinner title flips it straight back to 'working'.
+		if (targetSessionId) {
+			if (event.notificationType === 'needs_input' || event.notificationType === 'action_needed') {
+				this.sessionManager.updateSessionActivity(targetSessionId, 'hook-blocked');
+			} else if (event.notificationType === 'task_complete') {
+				this.sessionManager.updateSessionActivity(targetSessionId, 'hook-stop');
+			}
+		}
+
 		this.notificationStore.addNotification(
 			targetSessionId,
 			event.notificationType,

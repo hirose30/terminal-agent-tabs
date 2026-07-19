@@ -9,8 +9,9 @@ import type ClaudeCodeTabsPlugin from './main';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 import { CodexSessionCapture } from './CodexSessionCapture';
+import { nextAgentActivity } from './AgentActivity';
+import type { AgentActivityEvent } from './AgentActivity';
 import type {
-	AgentActivityState,
 	Session,
 	StartMode,
 	TabLaunchConfig,
@@ -844,14 +845,17 @@ export class SessionManager {
 	}
 
 	/**
-	 * Record the agent's OSC-reported activity. No-ops on same-state re-sets:
-	 * while working, the spinner retitles at high frequency and must not
-	 * trigger a sidebar re-render per frame.
+	 * Apply an observed activity event (OSC title prefix or hook) through the
+	 * transition rules in AgentActivity.ts. No-ops when the state does not
+	 * change: while working, the spinner retitles at high frequency and must
+	 * not trigger a sidebar re-render per frame.
 	 */
-	updateSessionActivity(sessionId: string, state: AgentActivityState): void {
+	updateSessionActivity(sessionId: string, event: AgentActivityEvent): void {
 		const session = this.sessions.get(sessionId);
-		if (session && session.agentActivity !== state) {
-			session.agentActivity = state;
+		if (!session) return;
+		const next = nextAgentActivity(session.agentActivity, event);
+		if (session.agentActivity !== next) {
+			session.agentActivity = next;
 			session.agentActivityChangedAt = new Date();
 			this.notifyChange();
 		}

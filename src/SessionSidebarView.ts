@@ -176,9 +176,12 @@ export class SessionSidebarView extends ItemView {
 		// Status dot
 		const statusDot = titleRow.createSpan({ cls: 'claude-sidebar-card-status-dot' });
 		if (status === 'running') {
-			// Agent activity refines the running dot; idle/unknown keep the
-			// legacy green so CLIs without OSC activity titles look unchanged.
-			if (session?.agentActivity === 'working') {
+			// Agent activity refines the running dot (blocked > working);
+			// idle/unknown keep the legacy green so CLIs without activity
+			// signals look unchanged. exited/error take the other branches.
+			if (session?.agentActivity === 'blocked') {
+				statusDot.addClass('status-blocked');
+			} else if (session?.agentActivity === 'working') {
 				statusDot.addClass('status-working');
 			} else {
 				statusDot.addClass('status-running');
@@ -247,7 +250,7 @@ export class SessionSidebarView extends ItemView {
 
 		const activity = session?.agentActivity;
 		if (activity && activity !== 'unknown') {
-			lines.push(`Activity: ${activity}`);
+			lines.push(`Activity: ${activity === 'blocked' ? 'waiting for input' : activity}`);
 		}
 
 		if (cliDisplayName) lines.push(`CLI: ${cliDisplayName}`);
