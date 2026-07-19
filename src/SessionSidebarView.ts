@@ -285,12 +285,14 @@ export class SessionSidebarView extends ItemView {
 		status: string,
 		exitCode: number | null | undefined
 	): string {
-		// Priority: last output line > notification body > status
+		// Priority: notification body > last output line > status fallback.
+		// (lastOutputLine is usually Claude Code's status-bar line, so the
+		// notification body is the more useful subtitle when one exists.)
+		if (latestNotification) {
+			return this.toSingleLine(latestNotification.body, 120);
+		}
 		if (lastOutputLine) {
 			return lastOutputLine;
-		}
-		if (latestNotification) {
-			return latestNotification.body;
 		}
 		if (status === 'exited') {
 			return `exited (${exitCode ?? '?'})`;
@@ -299,6 +301,12 @@ export class SessionSidebarView extends ItemView {
 			return 'error';
 		}
 		return '';
+	}
+
+	/** Collapse whitespace to single spaces and cap length with a trailing ellipsis. */
+	private toSingleLine(text: string, maxLength: number): string {
+		const collapsed = text.replace(/\s+/g, ' ').trim();
+		return collapsed.length > maxLength ? `${collapsed.slice(0, maxLength)}…` : collapsed;
 	}
 
 	private formatTimeAgo(date: Date): string {
