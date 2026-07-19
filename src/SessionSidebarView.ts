@@ -160,16 +160,15 @@ export class SessionSidebarView extends ItemView {
 			contextParts.push(this.formatTimeAgo(session.createdAt));
 		}
 
-		// In compact/normal the omitted rows are surfaced through the card tooltip.
-		let tooltip = '';
-		if (density !== 'detailed') {
-			const tooltipParts: string[] = [];
-			if (density === 'compact' && subtitleText) tooltipParts.push(subtitleText);
-			if (statusKind === 'action') tooltipParts.push('Needs input');
-			else if (statusKind === 'complete') tooltipParts.push('Complete');
-			if (contextParts.length > 0) tooltipParts.push(contextParts.join(' \u00B7 '));
-			tooltip = tooltipParts.join('\n');
-		}
+		// Always surface the full detail through the card tooltip. The visible rows
+		// are clamped (normal: 1 line, detailed: 2 lines) or omitted (compact), so
+		// the tooltip keeps the un-truncated text available in every density.
+		const tooltipParts: string[] = [];
+		if (subtitleText) tooltipParts.push(subtitleText);
+		if (statusKind === 'action') tooltipParts.push('Needs input');
+		else if (statusKind === 'complete') tooltipParts.push('Complete');
+		if (contextParts.length > 0) tooltipParts.push(contextParts.join(' \u00B7 '));
+		const tooltip = tooltipParts.join('\n');
 
 		const card = container.createDiv({
 			cls: `claude-sidebar-card${isActive ? ' is-active' : ''}`,
