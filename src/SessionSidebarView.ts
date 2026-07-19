@@ -144,7 +144,6 @@ export class SessionSidebarView extends ItemView {
 	): void {
 		const density = this.plugin.settings.sessionListDensity;
 		const status = session?.status || 'exited';
-		const notificationCount = this.plugin.notificationStore.getCountForSession(sessionId);
 		const latestNotification = this.plugin.notificationStore.getLatestForSession(sessionId);
 		const lastOutputLine = session?.lastOutputLine || '';
 		const cliDisplayName = session
@@ -170,15 +169,9 @@ export class SessionSidebarView extends ItemView {
 			attr: tooltip ? { title: tooltip } : undefined
 		});
 
-		// Row 1: Title with optional badge
+		// Row 1: Title row. Attention is conveyed by the trailing status icon
+		// below, not a numeric count.
 		const titleRow = card.createDiv({ cls: 'claude-sidebar-card-title-row' });
-
-		if (notificationCount > 0) {
-			titleRow.createSpan({
-				text: String(notificationCount),
-				cls: 'claude-sidebar-badge'
-			});
-		}
 
 		// Status dot
 		const statusDot = titleRow.createSpan({ cls: 'claude-sidebar-card-status-dot' });
