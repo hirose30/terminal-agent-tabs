@@ -403,6 +403,15 @@
 	font-size: 13px;
 }
 
+/* Compact / normal keep the title on a single line so card height stays fixed. */
+.claude-sidebar-container.is-density-compact .claude-sidebar-card-title,
+.claude-sidebar-container.is-density-normal .claude-sidebar-card-title {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	word-break: normal;
+}
+
 /* ============================================================
  * xterm.js default styles
  * Included here instead of injecting via document.createElement('style')
