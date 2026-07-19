@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
 import type ClaudeCodeTabsPlugin from './main';
-import type { CliProfile } from './types';
+import type { CliProfile, SessionListDensity } from './types';
 import { DEFAULT_TERMINAL_FONT_FAMILY } from './types';
 import { SPECIAL_CLI_ID_DEFAULT_SHELL } from './SessionManager';
 import { listGhosttyThemes } from './GhosttyThemeLoader';
@@ -184,6 +184,24 @@ export class ClaudeCodeTabsSettingTab extends PluginSettingTab {
 						})
 				);
 		}
+
+		new Setting(containerEl).setName('Session sidebar').setHeading();
+
+		new Setting(containerEl)
+			.setName('Session list density')
+			.setDesc('How much detail each session shows in the sidebar. Compact fits the most sessions; detailed shows the subtitle, status and context.')
+			.addDropdown((dropdown) => {
+				dropdown.addOption('compact', 'Compact');
+				dropdown.addOption('normal', 'Normal');
+				dropdown.addOption('detailed', 'Detailed');
+				dropdown
+					.setValue(this.plugin.settings.sessionListDensity)
+					.onChange(async (value) => {
+						this.plugin.settings.sessionListDensity = value as SessionListDensity;
+						await this.plugin.saveSettings();
+						this.plugin.refreshSessionSidebars();
+					});
+			});
 
 		new Setting(containerEl).setName('Terminal appearance').setHeading();
 

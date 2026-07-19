@@ -3,7 +3,7 @@
  * Handles conversion from old settings shapes (pre-v0.3) to current CliProfile format.
  */
 
-import type { CliProfile, ResumeStrategy } from './types';
+import type { CliProfile, ResumeStrategy, SessionListDensity } from './types';
 import { normalizeCliId } from './utils';
 
 export interface LegacySettingsShape {
@@ -29,6 +29,7 @@ export interface LegacySettingsShape {
 	includeNotePathInSelectionSend?: boolean;
 	enableDebugLogging?: boolean;
 	terminalThemeName?: string;
+	sessionListDensity?: SessionListDensity;
 }
 
 function dedupeProfiles(profiles: CliProfile[]): CliProfile[] {

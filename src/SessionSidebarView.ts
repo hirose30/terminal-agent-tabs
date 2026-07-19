@@ -96,8 +96,11 @@ export class SessionSidebarView extends ItemView {
 		if (!this.contentContainer) return;
 		this.contentContainer.empty();
 
+		const density = this.plugin.settings.sessionListDensity;
+		this.contentContainer.removeClass('is-density-compact', 'is-density-normal', 'is-density-detailed');
+		this.contentContainer.addClass(`is-density-${density}`);
+
 		this.renderSessionsSection(this.contentContainer);
-		this.renderNotificationsSection(this.contentContainer);
 	}
 
 	private renderSessionsSection(container: HTMLElement): void {
@@ -138,6 +141,7 @@ export class SessionSidebarView extends ItemView {
 		isActive: boolean,
 		leaf: WorkspaceLeaf
 	): void {
+		const density = this.plugin.settings.sessionListDensity;
 		const status = session?.status || 'exited';
 		const notificationCount = this.plugin.notificationStore.getCountForSession(sessionId);
 		const latestNotification = this.plugin.notificationStore.getLatestForSession(sessionId);
@@ -146,8 +150,30 @@ export class SessionSidebarView extends ItemView {
 			? this.plugin.sessionManager.getCliDisplayName(session.cliId)
 			: '';
 
+		const statusKind = this.getNotificationStatusKind(latestNotification);
+		const subtitleText = this.getSubtitleText(lastOutputLine, latestNotification, status, session?.exitCode);
+
+		// Context line (CLI profile + elapsed time)
+		const contextParts: string[] = [];
+		if (cliDisplayName) contextParts.push(cliDisplayName);
+		if (session?.createdAt) {
+			contextParts.push(this.formatTimeAgo(session.createdAt));
+		}
+
+		// In compact/normal the omitted rows are surfaced through the card tooltip.
+		let tooltip = '';
+		if (density !== 'detailed') {
+			const tooltipParts: string[] = [];
+			if (density === 'compact' && subtitleText) tooltipParts.push(subtitleText);
+			if (statusKind === 'action') tooltipParts.push('Needs input');
+			else if (statusKind === 'complete') tooltipParts.push('Complete');
+			if (contextParts.length > 0) tooltipParts.push(contextParts.join(' \u00B7 '));
+			tooltip = tooltipParts.join('\n');
+		}
+
 		const card = container.createDiv({
-			cls: `claude-sidebar-card${isActive ? ' is-active' : ''}`
+			cls: `claude-sidebar-card${isActive ? ' is-active' : ''}`,
+			attr: tooltip ? { title: tooltip } : undefined
 		});
 
 		// Row 1: Title with optional badge
@@ -175,37 +201,39 @@ export class SessionSidebarView extends ItemView {
 			cls: 'claude-sidebar-card-title'
 		});
 
-		// Row 2: Latest output line or notification body
-		const subtitleText = this.getSubtitleText(lastOutputLine, latestNotification, status, session?.exitCode);
-		if (subtitleText) {
+		// Compact/normal collapse the status label into a trailing icon on the title row.
+		if (density !== 'detailed' && statusKind) {
+			const titleStatus = titleRow.createSpan({ cls: `claude-sidebar-card-title-status type-${statusKind}` });
+			setIcon(titleStatus, statusKind === 'action' ? 'alert-triangle' : 'check-circle');
+		}
+
+		// Row 2: Latest output line or notification body (normal + detailed)
+		if (density !== 'compact' && subtitleText) {
 			card.createDiv({
 				text: subtitleText,
 				cls: 'claude-sidebar-card-subtitle'
 			});
 		}
 
-		// Row 3: Status label (if action needed)
-		if (latestNotification && (latestNotification.type === 'action_needed' || latestNotification.type === 'needs_input')) {
-			const statusLabel = card.createDiv({ cls: 'claude-sidebar-card-status-label type-action' });
-			setIcon(statusLabel, 'alert-triangle');
-			statusLabel.createSpan({ text: 'Needs input' });
-		} else if (latestNotification && latestNotification.type === 'task_complete') {
-			const statusLabel = card.createDiv({ cls: 'claude-sidebar-card-status-label type-complete' });
-			setIcon(statusLabel, 'check-circle');
-			statusLabel.createSpan({ text: 'Complete' });
-		}
+		if (density === 'detailed') {
+			// Row 3: Status label (if action needed)
+			if (statusKind === 'action') {
+				const statusLabel = card.createDiv({ cls: 'claude-sidebar-card-status-label type-action' });
+				setIcon(statusLabel, 'alert-triangle');
+				statusLabel.createSpan({ text: 'Needs input' });
+			} else if (statusKind === 'complete') {
+				const statusLabel = card.createDiv({ cls: 'claude-sidebar-card-status-label type-complete' });
+				setIcon(statusLabel, 'check-circle');
+				statusLabel.createSpan({ text: 'Complete' });
+			}
 
-		// Row 4: Context line (CLI profile + time)
-		const contextParts: string[] = [];
-		if (cliDisplayName) contextParts.push(cliDisplayName);
-		if (session?.createdAt) {
-			contextParts.push(this.formatTimeAgo(session.createdAt));
-		}
-		if (contextParts.length > 0) {
-			card.createDiv({
-				text: contextParts.join(' \u00B7 '),
-				cls: 'claude-sidebar-card-context'
-			});
+			// Row 4: Context line (CLI profile + time)
+			if (contextParts.length > 0) {
+				card.createDiv({
+					text: contextParts.join(' \u00B7 '),
+					cls: 'claude-sidebar-card-context'
+				});
+			}
 		}
 
 		card.onclick = () => {
@@ -213,6 +241,19 @@ export class SessionSidebarView extends ItemView {
 			const v = leaf.view as ClaudeSessionView;
 			v.focusTerminal();
 		};
+	}
+
+	private getNotificationStatusKind(
+		notification: AgentNotification | undefined
+	): 'action' | 'complete' | null {
+		if (!notification) return null;
+		if (notification.type === 'action_needed' || notification.type === 'needs_input') {
+			return 'action';
+		}
+		if (notification.type === 'task_complete') {
+			return 'complete';
+		}
+		return null;
 	}
 
 	private getSubtitleText(
@@ -235,99 +276,6 @@ export class SessionSidebarView extends ItemView {
 			return 'error';
 		}
 		return '';
-	}
-
-	private renderNotificationsSection(container: HTMLElement): void {
-		const notifications = this.plugin.notificationStore.getAll();
-
-		const header = container.createDiv({ cls: 'claude-sidebar-section-header' });
-		const titleSpan = header.createSpan({ cls: 'claude-sidebar-section-title' });
-		const totalUnread = this.plugin.notificationStore.getTotalCount();
-		titleSpan.textContent = totalUnread > 0 ? `Notifications (${totalUnread})` : 'Notifications';
-
-		if (notifications.length > 0) {
-			const clearBtn = header.createEl('button', {
-				cls: 'claude-sidebar-icon-btn',
-				attr: { 'aria-label': 'Clear all notifications' }
-			});
-			setIcon(clearBtn, 'trash-2');
-			clearBtn.onclick = () => {
-				this.plugin.notificationStore.clearAll();
-			};
-		}
-
-		if (notifications.length === 0) {
-			container.createDiv({ text: 'No notifications', cls: 'claude-sidebar-empty' });
-			return;
-		}
-
-		const list = container.createDiv({ cls: 'claude-sidebar-notification-list' });
-
-		for (const notification of notifications) {
-			this.renderNotificationItem(list, notification);
-		}
-	}
-
-	private renderNotificationItem(container: HTMLElement, notification: AgentNotification): void {
-		const item = container.createDiv({
-			cls: 'claude-sidebar-notification-item is-unread'
-		});
-
-		// Row 1: Type badge + time
-		const typeRow = item.createDiv({ cls: 'claude-sidebar-notification-type-row' });
-
-		const typeBadge = typeRow.createSpan({ cls: 'claude-sidebar-notification-type' });
-		if (notification.type === 'action_needed') {
-			typeBadge.addClass('type-action');
-			typeBadge.textContent = 'Action needed';
-		} else if (notification.type === 'needs_input') {
-			typeBadge.addClass('type-action');
-			typeBadge.textContent = 'Needs input';
-		} else if (notification.type === 'task_complete') {
-			typeBadge.addClass('type-complete');
-			typeBadge.textContent = 'Task complete';
-		} else {
-			typeBadge.addClass('type-event');
-			typeBadge.textContent = 'Agent event';
-		}
-
-		const timeAgo = this.formatTimeAgo(notification.timestamp);
-		typeRow.createSpan({ text: timeAgo, cls: 'claude-sidebar-notification-time' });
-
-		// Row 2: Body (truncate to avoid huge JSON blobs)
-		const bodyText = notification.body.length > 200
-			? notification.body.slice(0, 200) + '...'
-			: notification.body;
-		item.createDiv({
-			text: bodyText,
-			cls: 'claude-sidebar-notification-body'
-		});
-
-		// Row 3: Source
-		item.createDiv({
-			text: notification.source,
-			cls: 'claude-sidebar-notification-source'
-		});
-
-		item.onclick = () => {
-			this.plugin.notificationStore.dismissNotification(notification.id);
-			this.jumpToSession(notification.sessionId);
-		};
-	}
-
-	private jumpToSession(sessionId: string): void {
-		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CLAUDE_SESSION);
-		let targetLeaf = leaves.find((leaf) => (leaf.view as ClaudeSessionView).sessionId === sessionId);
-		// Fallback to first session if exact match not found
-		if (!targetLeaf && leaves.length > 0) {
-			targetLeaf = leaves[0];
-		}
-		if (targetLeaf) {
-			void this.app.workspace.revealLeaf(targetLeaf);
-			// Focus the terminal inside the view
-			const view = targetLeaf.view as ClaudeSessionView;
-			view.focusTerminal();
-		}
 	}
 
 	private formatTimeAgo(date: Date): string {

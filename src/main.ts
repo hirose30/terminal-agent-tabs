@@ -312,6 +312,12 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 				typeof loaded.terminalThemeName === 'string'
 					? loaded.terminalThemeName
 					: DEFAULT_SETTINGS.terminalThemeName,
+			sessionListDensity:
+				loaded.sessionListDensity === 'compact'
+					|| loaded.sessionListDensity === 'normal'
+					|| loaded.sessionListDensity === 'detailed'
+					? loaded.sessionListDensity
+					: DEFAULT_SETTINGS.sessionListDensity,
 			cliProfiles
 		};
 	}
@@ -464,6 +470,15 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		for (const leaf of leaves) {
 			if (leaf.view instanceof ClaudeSessionView) {
 				leaf.view.applyTerminalAppearanceSettings(options);
+			}
+		}
+	}
+
+	refreshSessionSidebars(): void {
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_SESSION_SIDEBAR);
+		for (const leaf of leaves) {
+			if (leaf.view instanceof SessionSidebarView) {
+				leaf.view.render();
 			}
 		}
 	}
