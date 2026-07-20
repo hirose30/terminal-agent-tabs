@@ -5,7 +5,7 @@
  * unit-testable in isolation.
  */
 
-import type { AgentActivityState, NotificationType } from './types';
+import type { AgentActivityState, NotificationType, SessionStatus } from './types';
 
 /** Observed inputs that can move a session's agent activity. */
 export type AgentActivityEvent =
@@ -67,6 +67,24 @@ export function nextAgentActivity(
  * - absent (old relay lines without the field): conservatively blocked,
  *   preserving the pre-discrimination behavior
  */
+/**
+ * Count sessions whose agent is waiting on the user right now. Drives the
+ * dock badge: "how many prompts are blocked on me" is actionable, unlike an
+ * unread-notification total. Only running sessions count — exit paths reset
+ * the activity, but stay defensive against stale snapshots.
+ */
+export function countBlockedSessions(
+	sessions: Iterable<{ agentActivity: AgentActivityState; status: SessionStatus }>
+): number {
+	let count = 0;
+	for (const session of sessions) {
+		if (session.agentActivity === 'blocked' && session.status === 'running') {
+			count += 1;
+		}
+	}
+	return count;
+}
+
 /**
  * Map a PreToolUse hook (by tool_name) to an activity event, or null when
  * the tool must not move the state.

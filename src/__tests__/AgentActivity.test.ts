@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { nextAgentActivity, hookActivityEvent, preToolUseActivityEvent } from '../AgentActivity';
-import type { AgentActivityState } from '../types';
+import {
+	nextAgentActivity,
+	hookActivityEvent,
+	preToolUseActivityEvent,
+	countBlockedSessions
+} from '../AgentActivity';
+import type { AgentActivityState, SessionStatus } from '../types';
 
 describe('nextAgentActivity', () => {
 	const ALL_STATES: AgentActivityState[] = ['working', 'blocked', 'idle', 'unknown'];
@@ -108,6 +113,32 @@ describe('hookActivityEvent', () => {
 	it('never moves the state for agent_event', () => {
 		expect(hookActivityEvent('agent_event', undefined)).toBeNull();
 		expect(hookActivityEvent('agent_event', 'permission_prompt')).toBeNull();
+	});
+});
+
+describe('countBlockedSessions', () => {
+	const session = (agentActivity: AgentActivityState, status: SessionStatus) =>
+		({ agentActivity, status });
+
+	it('counts only running sessions that are blocked', () => {
+		expect(countBlockedSessions([
+			session('blocked', 'running'),
+			session('blocked', 'running'),
+			session('working', 'running'),
+			session('idle', 'running'),
+			session('unknown', 'running')
+		])).toBe(2);
+	});
+
+	it('ignores blocked sessions that are no longer running', () => {
+		expect(countBlockedSessions([
+			session('blocked', 'exited'),
+			session('blocked', 'error')
+		])).toBe(0);
+	});
+
+	it('returns 0 for no sessions', () => {
+		expect(countBlockedSessions([])).toBe(0);
 	});
 });
 

@@ -9,7 +9,7 @@ import type ClaudeCodeTabsPlugin from './main';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 import { CodexSessionCapture } from './CodexSessionCapture';
-import { nextAgentActivity } from './AgentActivity';
+import { countBlockedSessions, nextAgentActivity } from './AgentActivity';
 import type { AgentActivityEvent } from './AgentActivity';
 import type {
 	Session,
@@ -787,6 +787,11 @@ export class SessionManager {
 		if (!session) return undefined;
 		const isRunning = session.status === 'running' && !!session.process && !session.process.killed;
 		return isRunning ? session : undefined;
+	}
+
+	/** Number of running sessions currently blocked on the user (dock badge). */
+	getBlockedSessionCount(): number {
+		return countBlockedSessions(this.sessions.values());
 	}
 
 	/**

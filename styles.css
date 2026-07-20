@@ -318,25 +318,6 @@
 	overflow: hidden;
 }
 
-/* Tab Badge (Phase 2) */
-
-.claude-tab-badge {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	background: var(--color-red, #e53935);
-	color: #fff;
-	font-size: 9px;
-	font-weight: 700;
-	padding: 0 4px;
-	border-radius: 7px;
-	min-width: 14px;
-	height: 14px;
-	line-height: 14px;
-	margin-left: 4px;
-	vertical-align: middle;
-}
-
 /* Title-row status icon (compact / normal densities) */
 
 .claude-sidebar-card-title-status {

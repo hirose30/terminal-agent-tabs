@@ -67,9 +67,11 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		this.outputMonitor = new OutputMonitor();
 		this.dockBadge = new DockBadge();
 
-		// Sync dock badge with unread notification count
-		this.notificationStore.onChange(() => {
-			this.dockBadge.update(this.notificationStore.getTotalCount());
+		// Dock badge counts sessions currently blocked on the user — an
+		// actionable number, unlike an unread-notification total. Activity
+		// transitions fire sessionManager's notifyChange, so this stays live.
+		this.sessionManager.onChange(() => {
+			this.dockBadge.update(this.sessionManager.getBlockedSessionCount());
 		});
 		this.hookEventMonitor = new HookEventMonitor({
 			pollIntervalMs: this.settings.hookEventsPollIntervalMs,

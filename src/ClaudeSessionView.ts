@@ -66,9 +66,7 @@ export class ClaudeSessionView extends ItemView {
 	// Launch config captured from a pending new-tab open (consumed synchronously in onOpen).
 	private pendingLaunchConfigCaptured: Partial<TabLaunchConfig> | null = null;
 	private osc52Disposer: { dispose: () => void } | null = null;
-	private unsubscribeNotifications: (() => void) | null = null;
 	private unsubscribeSessions: (() => void) | null = null;
-	private badgeEl: HTMLElement | null = null;
 	private activityDotEl: HTMLElement | null = null;
 	// Class currently rendered on the tab-header activity dot ('' = no dot);
 	// lets the session-change subscription skip DOM work on unrelated changes.
@@ -297,10 +295,6 @@ export class ClaudeSessionView extends ItemView {
 		this.addAction('minus', 'Decrease font size', () => this.decreaseFontSize());
 		this.addAction('plus', 'Increase font size', () => this.increaseFontSize());
 
-		this.unsubscribeNotifications = this.plugin.notificationStore.onChange(() => {
-			this.updateTabBadge();
-		});
-
 		// Mirror the sidebar's activity colors on the tab header itself, so
 		// working/blocked is visible without opening the sidebar.
 		this.unsubscribeSessions = this.plugin.sessionManager.onChange(() => {
@@ -446,19 +440,9 @@ export class ClaudeSessionView extends ItemView {
 		// Phase 4: capture the final screen while the terminal is still alive (also covers quit).
 		this.saveScrollbackNow();
 
-		if (this.unsubscribeNotifications) {
-			this.unsubscribeNotifications();
-			this.unsubscribeNotifications = null;
-		}
-
 		if (this.unsubscribeSessions) {
 			this.unsubscribeSessions();
 			this.unsubscribeSessions = null;
-		}
-
-		if (this.badgeEl) {
-			this.badgeEl.remove();
-			this.badgeEl = null;
 		}
 
 		if (this.activityDotEl) {
@@ -585,13 +569,12 @@ export class ClaudeSessionView extends ItemView {
 		}
 		const nextHeaderText = cleanTitle || this.headerText || 'Coding Session';
 		// Spinner retitles only change the (already stripped) prefix; skip the
-		// tab-header DOM work when the visible text is unchanged. The badge
-		// refreshes separately via the notification-store subscription.
+		// tab-header DOM work when the visible text is unchanged. The activity
+		// dot refreshes separately via the session-manager subscription.
 		if (nextHeaderText === this.headerText) return;
 		this.headerText = nextHeaderText;
 		(this.leaf as LeafWithTabHeader).updateHeader?.();
 		this.plugin.sessionManager.updateSessionHeader(this.sessionId, this.headerText);
-		this.updateTabBadge();
 		// updateHeader() may rebuild the tab header DOM; re-attach the dot.
 		this.activityDotCls = '';
 		this.updateTabActivityDot();
@@ -620,36 +603,15 @@ export class ClaudeSessionView extends ItemView {
 		const tabHeaderEl = (this.leaf as LeafWithTabHeader).tabHeaderEl;
 		if (!tabHeaderEl) return;
 
-		this.activityDotEl = createSpan({ cls: `claude-tab-activity-dot ${cls}` });
+		this.activityDotEl = createSpan({
+			cls: `claude-tab-activity-dot ${cls}`,
+			attr: { 'aria-label': cls === 'status-blocked' ? 'Waiting for input' : 'Working' }
+		});
 		const innerTitle = tabHeaderEl.querySelector('.workspace-tab-header-inner-title');
 		if (innerTitle?.parentElement) {
 			innerTitle.parentElement.insertBefore(this.activityDotEl, innerTitle);
 		} else {
 			tabHeaderEl.appendChild(this.activityDotEl);
-		}
-	}
-
-	private updateTabBadge(): void {
-		const notificationCount = this.plugin.notificationStore.getCountForSession(this.sessionId);
-
-		const tabHeaderEl = (this.leaf as LeafWithTabHeader).tabHeaderEl;
-		if (!tabHeaderEl) return;
-
-		if (this.badgeEl) {
-			this.badgeEl.remove();
-			this.badgeEl = null;
-		}
-
-		if (notificationCount > 0) {
-			this.badgeEl = document.createElement('span');
-			this.badgeEl.className = 'claude-tab-badge';
-			this.badgeEl.textContent = String(notificationCount);
-			const innerTitle = tabHeaderEl.querySelector('.workspace-tab-header-inner-title');
-			if (innerTitle) {
-				innerTitle.parentElement?.appendChild(this.badgeEl);
-			} else {
-				tabHeaderEl.appendChild(this.badgeEl);
-			}
 		}
 	}
 
