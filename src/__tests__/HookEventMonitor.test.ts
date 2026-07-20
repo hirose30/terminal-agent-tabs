@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyHookEvent, parseHookLine } from '../HookEventMonitor';
+import { classifyHookEvent, parseHookLine, resolveHookSessionId } from '../HookEventMonitor';
 
 describe('classifyHookEvent()', () => {
 	it('classifies "notification" event as needs_input', () => {
@@ -175,5 +175,81 @@ describe('parseHookLine()', () => {
 		expect(parseHookLine('not json')).toBeNull();
 		expect(parseHookLine('42')).toBeNull();
 		expect(parseHookLine('null')).toBeNull();
+	});
+
+	it('parses tat_session_id emitted by the relay --tat-session flag', () => {
+		const event = parseHookLine(JSON.stringify({
+			session_id: 'claude-side-id',
+			tat_session_id: 'tat-side-id',
+			hook: 'notification',
+			message: 'm'
+		}));
+		expect(event!.tatSessionId).toBe('tat-side-id');
+		expect(event!.agentSessionId).toBe('claude-side-id');
+	});
+
+	it('leaves tatSessionId undefined when absent (legacy relay lines)', () => {
+		const event = parseHookLine(JSON.stringify({
+			hook: 'notification',
+			message: 'm'
+		}));
+		expect(event!.tatSessionId).toBeUndefined();
+	});
+
+	it('ignores a non-string tat_session_id', () => {
+		const event = parseHookLine(JSON.stringify({
+			hook: 'notification',
+			message: 'm',
+			tat_session_id: 7
+		}));
+		expect(event!.tatSessionId).toBeUndefined();
+	});
+});
+
+describe('resolveHookSessionId()', () => {
+	const resolver = (overrides: Partial<Parameters<typeof resolveHookSessionId>[1]> = {}) => ({
+		hasSession: () => false,
+		findByAgentSessionId: () => null,
+		fallback: () => 'heuristic',
+		...overrides
+	});
+
+	it('prefers a live tatSessionId over everything else', () => {
+		const result = resolveHookSessionId(
+			{ tatSessionId: 'tat-1', agentSessionId: 'agent-1' },
+			resolver({
+				hasSession: (id) => id === 'tat-1',
+				findByAgentSessionId: () => 'other-session'
+			})
+		);
+		expect(result).toBe('tat-1');
+	});
+
+	it('falls through to the agentSessionId reverse lookup when the tat session is gone', () => {
+		const result = resolveHookSessionId(
+			{ tatSessionId: 'tat-dead', agentSessionId: 'agent-1' },
+			resolver({ findByAgentSessionId: (id) => (id === 'agent-1' ? 'matched' : null) })
+		);
+		expect(result).toBe('matched');
+	});
+
+	it('uses the reverse lookup when no tatSessionId is present (legacy lines)', () => {
+		const result = resolveHookSessionId(
+			{ agentSessionId: 'agent-1' },
+			resolver({ findByAgentSessionId: () => 'matched' })
+		);
+		expect(result).toBe('matched');
+	});
+
+	it('falls back to the heuristic when the reverse lookup misses (resumed session)', () => {
+		const result = resolveHookSessionId(
+			{ agentSessionId: 'forked-new-id' },
+			resolver()
+		);
+		expect(result).toBe('heuristic');
+	});
+
+	it('falls back to the heuristic when neither id is present', () => {
+		expect(resolveHookSessionId({}, resolver())).toBe('heuristic');
 	});
 });

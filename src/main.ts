@@ -7,7 +7,7 @@ import {
 } from './SessionManager';
 import { NotificationStore } from './NotificationStore';
 import { OutputMonitor } from './OutputMonitor';
-import { HookEventMonitor } from './HookEventMonitor';
+import { HookEventMonitor, resolveHookSessionId } from './HookEventMonitor';
 import { DockBadge } from './DockBadge';
 import { ensureEmbeddedResources } from './EmbeddedResources';
 import { SessionSidebarView, VIEW_TYPE_SESSION_SIDEBAR } from './SessionSidebarView';
@@ -408,17 +408,14 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		this.playHookNotificationSound(event.soundKind);
 	}
 
-	/**
-	 * Prefer the deterministic link: assign-id launches pass the tab's
-	 * resumeKey as --session-id, so the hook payload's session_id maps
-	 * straight back to a session. Fall back to the heuristic for lines
-	 * without a session_id or without a matching live session.
-	 */
+	/** See resolveHookSessionId() for the resolution order and rationale. */
 	private resolveHookTargetSessionId(event: import('./HookEventMonitor').HookEvent): string {
-		return (event.agentSessionId
-			? this.sessionManager.findSessionIdByAgentSessionId(event.agentSessionId)
-			: null)
-			?? this.sessionManager.resolveNotificationSessionId();
+		return resolveHookSessionId(event, {
+			hasSession: (sessionId) => !!this.sessionManager.getSession(sessionId),
+			findByAgentSessionId: (agentSessionId) =>
+				this.sessionManager.findSessionIdByAgentSessionId(agentSessionId),
+			fallback: () => this.sessionManager.resolveNotificationSessionId()
+		});
 	}
 
 	private playHookNotificationSound(kind: 'action' | 'complete' | 'event'): void {

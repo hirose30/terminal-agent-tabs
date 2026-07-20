@@ -404,12 +404,12 @@ export class SessionManager {
 		}
 	}
 
-	private buildLaunchCommand(profile: CliProfile, startMode: StartMode, additionalArgs: string[], resumeKey?: string, codexSessionId?: string) {
+	private buildLaunchCommand(profile: CliProfile, tatSessionId: string, startMode: StartMode, additionalArgs: string[], resumeKey?: string, codexSessionId?: string) {
 		const strategy = this.resolveResumeStrategy(profile);
 		const legacyCanResume = profile.supportsResume && profile.resumeArgs.length > 0;
 		const canResume = strategy === 'assign-id' || strategy === 'continue-latest' || legacyCanResume;
 
-		const hookArgs = this.buildHookArgs(profile);
+		const hookArgs = this.buildHookArgs(profile, tatSessionId);
 		const base = [...hookArgs, ...profile.defaultArgs];
 
 		let coreArgs: string[];
@@ -471,8 +471,13 @@ export class SessionManager {
 	/**
 	 * Build --settings args to auto-inject hooks for Claude Code profiles.
 	 * This enables notifications without manual hook configuration.
+	 *
+	 * The relay command embeds the plugin-side session id (--tat-session) so
+	 * hook events link back to their tab deterministically. Claude's own
+	 * session_id is not reliable for this: resumed sessions (--resume) fork
+	 * to a fresh id that matches no resumeKey.
 	 */
-	private buildHookArgs(profile: CliProfile): string[] {
+	private buildHookArgs(profile: CliProfile, tatSessionId: string): string[] {
 		if (!this.supportsClaudeHooks(profile)) return [];
 
 		const eventsFilePath = this.plugin.getEffectiveHookEventsFilePath();
@@ -485,7 +490,7 @@ export class SessionManager {
 		}
 
 		const makeCmd = (hookType: string) =>
-			`python3 "${relayPath}" ${hookType} "${eventsFilePath}"`;
+			`python3 "${relayPath}" ${hookType} "${eventsFilePath}" --tat-session "${tatSessionId}"`;
 
 		const { hookLogNotificationEnabled, hookLogStopEnabled, hookLogPreToolUseEnabled } = this.plugin.settings;
 		const payload = buildHookSettingsPayload(
@@ -541,6 +546,7 @@ export class SessionManager {
 			: new Set<string>();
 		const launchCommand = this.buildLaunchCommand(
 			profile,
+			sessionId,
 			startMode,
 			resolvedLaunchConfig.additionalArgs,
 			resumeKey,

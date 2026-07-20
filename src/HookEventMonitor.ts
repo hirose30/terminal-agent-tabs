@@ -14,6 +14,8 @@ export interface HookEvent {
 	soundKind: 'action' | 'complete' | 'event';
 	message: string;
 	source: string;
+	/** Plugin-side session id embedded by the relay's --tat-session flag, if present. */
+	tatSessionId?: string;
 	/** Agent-side session id from the hook payload (Claude Code's session_id), if present. */
 	agentSessionId?: string;
 	/** Raw notification_type from the hook payload (e.g. 'permission_prompt'), if present. */
@@ -215,6 +217,9 @@ export function parseHookLine(line: string): HookEvent | null {
 		'agent';
 	// The relay writes the Claude Code hook payload verbatim, so session_id
 	// and notification_type ride along when the CLI provides them.
+	// tat_session_id is the relay's own addition (--tat-session flag).
+	const tatSessionId =
+		(typeof payload.tat_session_id === 'string' && payload.tat_session_id.trim()) || undefined;
 	const agentSessionId =
 		(typeof payload.session_id === 'string' && payload.session_id.trim()) || undefined;
 	const rawNotificationType =
@@ -231,10 +236,38 @@ export function parseHookLine(line: string): HookEvent | null {
 		soundKind,
 		message,
 		source,
+		tatSessionId,
 		agentSessionId,
 		rawNotificationType,
 		toolName
 	};
+}
+
+/**
+ * Resolve the plugin-side session a hook event belongs to, most reliable
+ * signal first:
+ * 1. tatSessionId — the relay embeds our own session id, exact and immune
+ *    to Claude-side id changes; used only if that session is still live.
+ * 2. agentSessionId — Claude's session_id matched against assign-id
+ *    resumeKeys; misses for resumed sessions, which fork to a fresh id.
+ * 3. The caller's heuristic fallback (single running / last active).
+ */
+export function resolveHookSessionId(
+	event: Pick<HookEvent, 'tatSessionId' | 'agentSessionId'>,
+	resolver: {
+		hasSession: (sessionId: string) => boolean;
+		findByAgentSessionId: (agentSessionId: string) => string | null;
+		fallback: () => string;
+	}
+): string {
+	if (event.tatSessionId && resolver.hasSession(event.tatSessionId)) {
+		return event.tatSessionId;
+	}
+	if (event.agentSessionId) {
+		const matched = resolver.findByAgentSessionId(event.agentSessionId);
+		if (matched) return matched;
+	}
+	return resolver.fallback();
 }
 
 /**
