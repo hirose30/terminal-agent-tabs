@@ -20,7 +20,7 @@ import {
 	type SessionListDensity,
 	type TabLaunchConfig,
 } from './types';
-import { hookActivityEvent } from './AgentActivity';
+import { hookActivityEvent, preToolUseActivityEvent } from './AgentActivity';
 import { migrateCliProfiles, type LegacySettingsShape } from './SettingsMigration';
 import { trimLogFileIfOversized } from './HookLogMaintenance';
 
@@ -359,21 +359,25 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 	}
 
 	private handleHookEvent(event: import('./HookEventMonitor').HookEvent): void {
+		// AskUserQuestion shows its picker without firing any Notification
+		// hook, so its PreToolUse line is the only "waiting on the user"
+		// signal. Flip the activity dot only — like every agent_event it
+		// stays silent (no notification, no sound).
+		const preToolUseEvent = preToolUseActivityEvent(event.toolName);
+		if (preToolUseEvent) {
+			const target = this.resolveHookTargetSessionId(event);
+			if (target) {
+				this.sessionManager.updateSessionActivity(target, preToolUseEvent);
+			}
+		}
+
 		// Skip agent_event notifications (e.g. pre-tool-use) as they are
 		// high-frequency informational events that don't require user attention.
 		if (event.notificationType === 'agent_event') {
 			return;
 		}
 
-		// Prefer the deterministic link: assign-id launches pass the tab's
-		// resumeKey as --session-id, so the hook payload's session_id maps
-		// straight back to a session. Fall back to the heuristic for lines
-		// without a session_id or without a matching live session.
-		const targetSessionId =
-			(event.agentSessionId
-				? this.sessionManager.findSessionIdByAgentSessionId(event.agentSessionId)
-				: null)
-			?? this.sessionManager.resolveNotificationSessionId();
+		const targetSessionId = this.resolveHookTargetSessionId(event);
 
 		// Drive the agent activity state from the hook stream. The heuristic
 		// fallback can still mis-attribute the event when several sessions
@@ -400,6 +404,19 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 			new Notice(`[${event.notificationTitle}] ${event.message}`, noticeTimeout);
 		}
 		this.playHookNotificationSound(event.soundKind);
+	}
+
+	/**
+	 * Prefer the deterministic link: assign-id launches pass the tab's
+	 * resumeKey as --session-id, so the hook payload's session_id maps
+	 * straight back to a session. Fall back to the heuristic for lines
+	 * without a session_id or without a matching live session.
+	 */
+	private resolveHookTargetSessionId(event: import('./HookEventMonitor').HookEvent): string {
+		return (event.agentSessionId
+			? this.sessionManager.findSessionIdByAgentSessionId(event.agentSessionId)
+			: null)
+			?? this.sessionManager.resolveNotificationSessionId();
 	}
 
 	private playHookNotificationSound(kind: 'action' | 'complete' | 'event'): void {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextAgentActivity, hookActivityEvent } from '../AgentActivity';
+import { nextAgentActivity, hookActivityEvent, preToolUseActivityEvent } from '../AgentActivity';
 import type { AgentActivityState } from '../types';
 
 describe('nextAgentActivity', () => {
@@ -108,5 +108,20 @@ describe('hookActivityEvent', () => {
 	it('never moves the state for agent_event', () => {
 		expect(hookActivityEvent('agent_event', undefined)).toBeNull();
 		expect(hookActivityEvent('agent_event', 'permission_prompt')).toBeNull();
+	});
+});
+
+describe('preToolUseActivityEvent', () => {
+	it('maps AskUserQuestion to hook-blocked (picker fires no Notification hook)', () => {
+		expect(preToolUseActivityEvent('AskUserQuestion')).toBe('hook-blocked');
+	});
+
+	it('does not move the state for other tools', () => {
+		expect(preToolUseActivityEvent('Bash')).toBeNull();
+		expect(preToolUseActivityEvent('Edit')).toBeNull();
+	});
+
+	it('does not move the state when tool_name is absent', () => {
+		expect(preToolUseActivityEvent(undefined)).toBeNull();
 	});
 });

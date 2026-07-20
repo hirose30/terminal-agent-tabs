@@ -18,6 +18,8 @@ export interface HookEvent {
 	agentSessionId?: string;
 	/** Raw notification_type from the hook payload (e.g. 'permission_prompt'), if present. */
 	rawNotificationType?: string;
+	/** tool_name from a PreToolUse payload (e.g. 'AskUserQuestion'), if present. */
+	toolName?: string;
 }
 
 export type HookEventCallback = (event: HookEvent) => void;
@@ -217,6 +219,8 @@ export function parseHookLine(line: string): HookEvent | null {
 		(typeof payload.session_id === 'string' && payload.session_id.trim()) || undefined;
 	const rawNotificationType =
 		(typeof payload.notification_type === 'string' && payload.notification_type.trim()) || undefined;
+	const toolName =
+		(typeof payload.tool_name === 'string' && payload.tool_name.trim()) || undefined;
 
 	const { notificationType, notificationTitle, soundKind } =
 		classifyHookEvent(rawEventType, message);
@@ -228,7 +232,8 @@ export function parseHookLine(line: string): HookEvent | null {
 		message,
 		source,
 		agentSessionId,
-		rawNotificationType
+		rawNotificationType,
+		toolName
 	};
 }
 

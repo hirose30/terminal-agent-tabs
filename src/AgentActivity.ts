@@ -67,6 +67,25 @@ export function nextAgentActivity(
  * - absent (old relay lines without the field): conservatively blocked,
  *   preserving the pre-discrimination behavior
  */
+/**
+ * Map a PreToolUse hook (by tool_name) to an activity event, or null when
+ * the tool must not move the state.
+ *
+ * AskUserQuestion renders its picker UI without firing any Notification hook
+ * (no 'permission_prompt'), so its PreToolUse line is the only signal that
+ * the agent is now waiting on the user. Every other tool (Bash, Edit, ...)
+ * is just the agent working — no transition.
+ *
+ * Accepted trade-off: operating the picker (arrow keys etc.) emits
+ * 'user-input', which clears 'blocked' before the answer is submitted.
+ * That's fine — interacting with the picker means the user has noticed it.
+ */
+export function preToolUseActivityEvent(
+	toolName: string | undefined
+): AgentActivityEvent | null {
+	return toolName === 'AskUserQuestion' ? 'hook-blocked' : null;
+}
+
 export function hookActivityEvent(
 	notificationType: NotificationType,
 	rawNotificationType: string | undefined

@@ -143,6 +143,34 @@ describe('parseHookLine()', () => {
 		expect(event!.agentSessionId).toBe('abc');
 	});
 
+	it('parses tool_name from a PreToolUse line', () => {
+		const event = parseHookLine(JSON.stringify({
+			session_id: 'abc',
+			hook: 'pre-tool-use',
+			hook_event_name: 'PreToolUse',
+			tool_name: 'AskUserQuestion'
+		}));
+		expect(event).not.toBeNull();
+		expect(event!.toolName).toBe('AskUserQuestion');
+		expect(event!.agentSessionId).toBe('abc');
+	});
+
+	it('leaves toolName undefined when tool_name is absent', () => {
+		const event = parseHookLine(JSON.stringify({
+			hook: 'notification',
+			message: 'm'
+		}));
+		expect(event!.toolName).toBeUndefined();
+	});
+
+	it('ignores a non-string tool_name', () => {
+		const event = parseHookLine(JSON.stringify({
+			hook: 'pre-tool-use',
+			tool_name: ['AskUserQuestion']
+		}));
+		expect(event!.toolName).toBeUndefined();
+	});
+
 	it('returns null for invalid JSON and non-object JSON', () => {
 		expect(parseHookLine('not json')).toBeNull();
 		expect(parseHookLine('42')).toBeNull();
