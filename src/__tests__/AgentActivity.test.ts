@@ -3,7 +3,8 @@ import {
 	nextAgentActivity,
 	hookActivityEvent,
 	preToolUseActivityEvent,
-	countBlockedSessions
+	countBlockedSessions,
+	isBlockedClearingInput
 } from '../AgentActivity';
 import type { AgentActivityState, SessionStatus } from '../types';
 
@@ -113,6 +114,38 @@ describe('hookActivityEvent', () => {
 	it('never moves the state for agent_event', () => {
 		expect(hookActivityEvent('agent_event', undefined)).toBeNull();
 		expect(hookActivityEvent('agent_event', 'permission_prompt')).toBeNull();
+	});
+});
+
+describe('isBlockedClearingInput', () => {
+	it('accepts Enter', () => {
+		expect(isBlockedClearingInput('\r')).toBe(true);
+	});
+
+	it('accepts input containing Enter (typed answer + submit)', () => {
+		expect(isBlockedClearingInput('x\r')).toBe(true);
+	});
+
+	it('accepts a lone Esc (cancel key)', () => {
+		expect(isBlockedClearingInput('\x1b')).toBe(true);
+	});
+
+	it('rejects focus reporting sequences (the original false-positive source)', () => {
+		expect(isBlockedClearingInput('\x1b[I')).toBe(false);
+		expect(isBlockedClearingInput('\x1b[O')).toBe(false);
+	});
+
+	it('rejects arrow keys (picker browsing)', () => {
+		expect(isBlockedClearingInput('\x1b[A')).toBe(false);
+	});
+
+	it('rejects plain printable keys (digit answers are confirmed by osc-working)', () => {
+		expect(isBlockedClearingInput('a')).toBe(false);
+		expect(isBlockedClearingInput('1')).toBe(false);
+	});
+
+	it('rejects empty input', () => {
+		expect(isBlockedClearingInput('')).toBe(false);
 	});
 });
 

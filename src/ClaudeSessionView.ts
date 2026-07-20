@@ -7,6 +7,7 @@ import { SerializeAddon } from '@xterm/addon-serialize';
 import type ClaudeCodeTabsPlugin from './main';
 import type { StartMode, TabLaunchConfig } from './types';
 import { OscParser, parseTitleActivity } from './OscParser';
+import { isBlockedClearingInput } from './AgentActivity';
 import { buildTerminalTheme, increaseFontSize, decreaseFontSize } from './TerminalTheme';
 import { buildPersistedSessionState, parsePersistedSessionState } from './PersistedSessionState';
 import { stripPrivateModeSequences } from './utils';
@@ -273,11 +274,15 @@ export class ClaudeSessionView extends ItemView {
 		});
 
 		this.terminal.onData((data: string) => {
-			// A keystroke while blocked means the user is answering the prompt
-			// (including Esc-cancel, which emits no Stop hook and no title
-			// change). In every other state this is a no-op inside
-			// updateSessionActivity, so per-keystroke cost is one map lookup.
-			this.plugin.sessionManager.updateSessionActivity(this.sessionId, 'user-input');
+			// Enter or a lone Esc while blocked means the user answered or
+			// cancelled the prompt (Esc-cancel emits no Stop hook and no
+			// title change, so nothing else would clear the state). The
+			// filter matters: onData also carries focus-reporting sequences
+			// (\x1b[I / \x1b[O), which used to clear blocked just for
+			// focusing the tab — see isBlockedClearingInput().
+			if (isBlockedClearingInput(data)) {
+				this.plugin.sessionManager.updateSessionActivity(this.sessionId, 'user-input');
+			}
 			this.plugin.sessionManager.writeToSession(this.sessionId, data);
 		});
 

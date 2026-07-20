@@ -55,18 +55,22 @@ export function nextAgentActivity(
 }
 
 /**
- * Map a classified hook event (plus the raw notification_type from the hook
- * payload, when the relay recorded one) to an activity event, or null when
- * the hook must not move the state.
+ * Whether a chunk of terminal input is a deliberate answer that should clear
+ * 'blocked' (fire 'user-input'): it contains Enter (\r), or is exactly a
+ * lone Esc (the cancel key).
  *
- * Raw notification_type values observed in real Claude Code logs:
- * - 'permission_prompt': the agent is waiting for an approval -> blocked
- * - 'idle_prompt': fired after ~60s of inactivity; the agent is merely idle,
- *   so it must NOT enter blocked (the notification itself still shows)
- * - anything else ('push_notification', 'auth_success', ...): no transition
- * - absent (old relay lines without the field): conservatively blocked,
- *   preserving the pre-discrimination behavior
+ * xterm's onData is NOT keystrokes-only. Claude Code enables focus
+ * reporting, so merely focusing/blurring the tab emits \x1b[I / \x1b[O —
+ * which used to clear the red dot just for looking at the tab. Any
+ * \x1b-prefixed sequence longer than the lone Esc (CSI: focus events,
+ * arrow keys, ...) is therefore ignored, and so are plain printable keys:
+ * typing a digit to answer a prompt is confirmed by the turn restarting,
+ * which the following braille title (osc-working) picks up anyway.
  */
+export function isBlockedClearingInput(data: string): boolean {
+	return data.includes('\r') || data === '\x1b';
+}
+
 /**
  * Count sessions whose agent is waiting on the user right now. Drives the
  * dock badge: "how many prompts are blocked on me" is actionable, unlike an
@@ -94,9 +98,9 @@ export function countBlockedSessions(
  * the agent is now waiting on the user. Every other tool (Bash, Edit, ...)
  * is just the agent working — no transition.
  *
- * Accepted trade-off: operating the picker (arrow keys etc.) emits
- * 'user-input', which clears 'blocked' before the answer is submitted.
- * That's fine — interacting with the picker means the user has noticed it.
+ * Browsing the picker (arrow keys) does not clear 'blocked' — only a
+ * submitted answer does (Enter / lone Esc via isBlockedClearingInput, or
+ * the restarted turn's braille title).
  */
 export function preToolUseActivityEvent(
 	toolName: string | undefined
@@ -104,6 +108,19 @@ export function preToolUseActivityEvent(
 	return toolName === 'AskUserQuestion' ? 'hook-blocked' : null;
 }
 
+/**
+ * Map a classified hook event (plus the raw notification_type from the hook
+ * payload, when the relay recorded one) to an activity event, or null when
+ * the hook must not move the state.
+ *
+ * Raw notification_type values observed in real Claude Code logs:
+ * - 'permission_prompt': the agent is waiting for an approval -> blocked
+ * - 'idle_prompt': fired after ~60s of inactivity; the agent is merely idle,
+ *   so it must NOT enter blocked (the notification itself still shows)
+ * - anything else ('push_notification', 'auth_success', ...): no transition
+ * - absent (old relay lines without the field): conservatively blocked,
+ *   preserving the pre-discrimination behavior
+ */
 export function hookActivityEvent(
 	notificationType: NotificationType,
 	rawNotificationType: string | undefined
