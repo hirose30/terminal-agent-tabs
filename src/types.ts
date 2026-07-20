@@ -69,6 +69,12 @@ export interface Session {
 	launchCwd: string;
 	/** Tier1 (Codex) captured session id for this live session; persisted for `codex resume <id>`. */
 	codexSessionId?: string;
+	/**
+	 * Tier1 (Claude) per-tab resume key. Under the assign-id strategy it is
+	 * passed as --session-id, so hook payloads report it back as session_id —
+	 * which lets hook events be linked to this session deterministically.
+	 */
+	resumeKey?: string;
 	tabLaunchConfig?: TabLaunchConfig;
 	lastOutputLine?: string;
 	debugLogPath?: string;

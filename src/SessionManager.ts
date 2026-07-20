@@ -586,6 +586,7 @@ export class SessionManager {
 				cliId: profile.id,
 				supportsResume: launchCommand.supportsResume,
 				launchCwd,
+				resumeKey,
 				tabLaunchConfig: resolvedLaunchConfig
 			};
 			this.sessions.set(sessionId, session);
@@ -610,6 +611,7 @@ export class SessionManager {
 			launchCwd,
 			// Seed with the restored id (if any); the post-launch capture below refreshes it.
 			codexSessionId,
+			resumeKey,
 			tabLaunchConfig: resolvedLaunchConfig,
 			debugLogPath: debugTarget?.logPath,
 			debugStream: debugTarget?.stream ?? null
@@ -663,6 +665,7 @@ export class SessionManager {
 
 		childProcess.on('exit', (code: number | null) => {
 			session.status = 'exited';
+			session.agentActivity = 'unknown';
 			session.exitCode = code ?? 0;
 			if (session.debugStream) {
 				try {
@@ -679,6 +682,7 @@ export class SessionManager {
 
 		childProcess.on('error', (error: Error) => {
 			session.status = 'error';
+			session.agentActivity = 'unknown';
 			session.exitCode = 1;
 			if (session.debugStream) {
 				try {
@@ -698,6 +702,9 @@ export class SessionManager {
 			childProcess.stdin.on('close', () => {
 				if (session.status === 'running') {
 					session.status = 'exited';
+					// This path keeps the session in the map (no dropSession),
+					// so a stale working/blocked would otherwise survive exit.
+					session.agentActivity = 'unknown';
 					onExit(0);
 				}
 			});
@@ -780,6 +787,23 @@ export class SessionManager {
 		if (!session) return undefined;
 		const isRunning = session.status === 'running' && !!session.process && !session.process.killed;
 		return isRunning ? session : undefined;
+	}
+
+	/**
+	 * Resolve the plugin-side session id for an agent-reported session id
+	 * (Claude Code's session_id from a hook payload). Deterministic because
+	 * assign-id launches pass the tab's resumeKey as --session-id. Returns
+	 * null when no live session matches (e.g. a --resume launch forked to a
+	 * new agent session id, or the hook came from a session TAT doesn't own).
+	 */
+	findSessionIdByAgentSessionId(agentSessionId: string): string | null {
+		if (!agentSessionId) return null;
+		for (const session of this.sessions.values()) {
+			if (session.resumeKey === agentSessionId) {
+				return session.sessionId;
+			}
+		}
+		return null;
 	}
 
 	/**

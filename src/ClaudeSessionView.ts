@@ -270,6 +270,11 @@ export class ClaudeSessionView extends ItemView {
 		});
 
 		this.terminal.onData((data: string) => {
+			// A keystroke while blocked means the user is answering the prompt
+			// (including Esc-cancel, which emits no Stop hook and no title
+			// change). In every other state this is a no-op inside
+			// updateSessionActivity, so per-keystroke cost is one map lookup.
+			this.plugin.sessionManager.updateSessionActivity(this.sessionId, 'user-input');
 			this.plugin.sessionManager.writeToSession(this.sessionId, data);
 		});
 
@@ -556,7 +561,12 @@ export class ClaudeSessionView extends ItemView {
 				state === 'working' ? 'osc-working' : 'osc-idle'
 			);
 		}
-		this.headerText = cleanTitle || this.headerText || 'Coding Session';
+		const nextHeaderText = cleanTitle || this.headerText || 'Coding Session';
+		// Spinner retitles only change the (already stripped) prefix; skip the
+		// tab-header DOM work when the visible text is unchanged. The badge
+		// refreshes separately via the notification-store subscription.
+		if (nextHeaderText === this.headerText) return;
+		this.headerText = nextHeaderText;
 		(this.leaf as LeafWithTabHeader).updateHeader?.();
 		this.plugin.sessionManager.updateSessionHeader(this.sessionId, this.headerText);
 		this.updateTabBadge();

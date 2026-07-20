@@ -20,6 +20,7 @@ import {
 	type SessionListDensity,
 	type TabLaunchConfig,
 } from './types';
+import { hookActivityEvent } from './AgentActivity';
 import { migrateCliProfiles, type LegacySettingsShape } from './SettingsMigration';
 import { trimLogFileIfOversized } from './HookLogMaintenance';
 
@@ -364,18 +365,25 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 			return;
 		}
 
-		const targetSessionId = this.sessionManager.resolveNotificationSessionId();
+		// Prefer the deterministic link: assign-id launches pass the tab's
+		// resumeKey as --session-id, so the hook payload's session_id maps
+		// straight back to a session. Fall back to the heuristic for lines
+		// without a session_id or without a matching live session.
+		const targetSessionId =
+			(event.agentSessionId
+				? this.sessionManager.findSessionIdByAgentSessionId(event.agentSessionId)
+				: null)
+			?? this.sessionManager.resolveNotificationSessionId();
 
-		// Drive the agent activity state from the hook stream. Hook events
-		// carry no session id, so the heuristic above can mis-attribute the
-		// event when several sessions run at once. That is self-repairing:
-		// if 'blocked' lands on a session that is actually mid-turn, its next
-		// braille spinner title flips it straight back to 'working'.
+		// Drive the agent activity state from the hook stream. The heuristic
+		// fallback can still mis-attribute the event when several sessions
+		// run at once; that is self-repairing: if 'blocked' lands on a
+		// session that is actually mid-turn, its next braille spinner title
+		// flips it straight back to 'working'.
 		if (targetSessionId) {
-			if (event.notificationType === 'needs_input' || event.notificationType === 'action_needed') {
-				this.sessionManager.updateSessionActivity(targetSessionId, 'hook-blocked');
-			} else if (event.notificationType === 'task_complete') {
-				this.sessionManager.updateSessionActivity(targetSessionId, 'hook-stop');
+			const activityEvent = hookActivityEvent(event.notificationType, event.rawNotificationType);
+			if (activityEvent) {
+				this.sessionManager.updateSessionActivity(targetSessionId, activityEvent);
 			}
 		}
 

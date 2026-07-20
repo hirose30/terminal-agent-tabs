@@ -14,6 +14,10 @@ export interface HookEvent {
 	soundKind: 'action' | 'complete' | 'event';
 	message: string;
 	source: string;
+	/** Agent-side session id from the hook payload (Claude Code's session_id), if present. */
+	agentSessionId?: string;
+	/** Raw notification_type from the hook payload (e.g. 'permission_prompt'), if present. */
+	rawNotificationType?: string;
 }
 
 export type HookEventCallback = (event: HookEvent) => void;
@@ -165,47 +169,67 @@ export class HookEventMonitor {
 	}
 
 	private handleLine(line: string): void {
-		let payload: Record<string, unknown>;
-		try {
-			const parsed: unknown = JSON.parse(line);
-			if (!parsed || typeof parsed !== 'object') return;
-			payload = parsed as Record<string, unknown>;
-		} catch {
+		const event = parseHookLine(line);
+		if (!event) {
 			if (this.debugLogging) {
 				console.debug('[TerminalAgentTabs] invalid hook event json:', line);
 			}
 			return;
 		}
-
-		const rawEventType =
-			(typeof payload.hook === 'string' && payload.hook) ||
-			(typeof payload.event === 'string' && payload.event) ||
-			(typeof payload.event_name === 'string' && payload.event_name) ||
-			(typeof payload.type === 'string' && payload.type) ||
-			'event';
-		const message =
-			(typeof payload.message === 'string' && payload.message.trim()) ||
-			(typeof payload.msg === 'string' && payload.msg.trim()) ||
-			(typeof payload.text === 'string' && payload.text.trim()) ||
-			(typeof payload.body === 'string' && payload.body.trim()) ||
-			(typeof payload.description === 'string' && payload.description.trim()) ||
-			rawEventType;
-		const source =
-			(typeof payload.source === 'string' && payload.source.trim()) ||
-			(typeof payload.cli === 'string' && payload.cli.trim()) ||
-			'agent';
-
-		const { notificationType, notificationTitle, soundKind } =
-			classifyHookEvent(rawEventType, message);
-
-		this.callback({
-			notificationType,
-			notificationTitle,
-			soundKind,
-			message,
-			source
-		});
+		this.callback(event);
 	}
+}
+
+/**
+ * Parse one JSONL hook log line into a HookEvent. Returns null when the line
+ * is not a JSON object. Exported for unit tests.
+ */
+export function parseHookLine(line: string): HookEvent | null {
+	let payload: Record<string, unknown>;
+	try {
+		const parsed: unknown = JSON.parse(line);
+		if (!parsed || typeof parsed !== 'object') return null;
+		payload = parsed as Record<string, unknown>;
+	} catch {
+		return null;
+	}
+
+	const rawEventType =
+		(typeof payload.hook === 'string' && payload.hook) ||
+		(typeof payload.event === 'string' && payload.event) ||
+		(typeof payload.event_name === 'string' && payload.event_name) ||
+		(typeof payload.type === 'string' && payload.type) ||
+		'event';
+	const message =
+		(typeof payload.message === 'string' && payload.message.trim()) ||
+		(typeof payload.msg === 'string' && payload.msg.trim()) ||
+		(typeof payload.text === 'string' && payload.text.trim()) ||
+		(typeof payload.body === 'string' && payload.body.trim()) ||
+		(typeof payload.description === 'string' && payload.description.trim()) ||
+		rawEventType;
+	const source =
+		(typeof payload.source === 'string' && payload.source.trim()) ||
+		(typeof payload.cli === 'string' && payload.cli.trim()) ||
+		'agent';
+	// The relay writes the Claude Code hook payload verbatim, so session_id
+	// and notification_type ride along when the CLI provides them.
+	const agentSessionId =
+		(typeof payload.session_id === 'string' && payload.session_id.trim()) || undefined;
+	const rawNotificationType =
+		(typeof payload.notification_type === 'string' && payload.notification_type.trim()) || undefined;
+
+	const { notificationType, notificationTitle, soundKind } =
+		classifyHookEvent(rawEventType, message);
+
+	return {
+		notificationType,
+		notificationTitle,
+		soundKind,
+		message,
+		source,
+		agentSessionId,
+		rawNotificationType
+	};
 }
 
 /**
