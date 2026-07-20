@@ -242,6 +242,27 @@
 	background-color: var(--color-green, #4caf50);
 }
 
+/* Tab-header activity dot: same semantics/colors as the sidebar dots. */
+.claude-tab-activity-dot {
+	display: inline-block;
+	flex-shrink: 0;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	margin-right: 4px;
+	align-self: center;
+}
+
+.claude-tab-activity-dot.status-working {
+	background-color: var(--color-yellow, #e5b567);
+	animation: claude-status-working-pulse 1.2s ease-in-out infinite;
+}
+
+.claude-tab-activity-dot.status-blocked {
+	background-color: var(--color-red, #e06c75);
+	animation: claude-status-working-pulse 1.2s ease-in-out infinite;
+}
+
 /* Agent is mid-turn (OSC title spinner): pulse a yellow dot. */
 .claude-sidebar-card-status-dot.status-working {
 	background-color: var(--color-yellow, #e5b567);

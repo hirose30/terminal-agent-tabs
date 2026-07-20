@@ -67,7 +67,12 @@ export class ClaudeSessionView extends ItemView {
 	private pendingLaunchConfigCaptured: Partial<TabLaunchConfig> | null = null;
 	private osc52Disposer: { dispose: () => void } | null = null;
 	private unsubscribeNotifications: (() => void) | null = null;
+	private unsubscribeSessions: (() => void) | null = null;
 	private badgeEl: HTMLElement | null = null;
+	private activityDotEl: HTMLElement | null = null;
+	// Class currently rendered on the tab-header activity dot ('' = no dot);
+	// lets the session-change subscription skip DOM work on unrelated changes.
+	private activityDotCls: string = '';
 	// Restore-start coordination. With deferred views, a tab activated after layout is
 	// already ready fires its onLayoutReady callback synchronously — BEFORE Obsidian calls
 	// setState — so the persisted cwd/resumeKey would not yet be applied. Start the initial
@@ -296,6 +301,13 @@ export class ClaudeSessionView extends ItemView {
 			this.updateTabBadge();
 		});
 
+		// Mirror the sidebar's activity colors on the tab header itself, so
+		// working/blocked is visible without opening the sidebar.
+		this.unsubscribeSessions = this.plugin.sessionManager.onChange(() => {
+			this.updateTabActivityDot();
+		});
+		this.updateTabActivityDot();
+
 		// Re-apply terminal theme when Obsidian theme changes
 		this.registerEvent(
 			this.app.workspace.on('css-change', () => {
@@ -439,9 +451,19 @@ export class ClaudeSessionView extends ItemView {
 			this.unsubscribeNotifications = null;
 		}
 
+		if (this.unsubscribeSessions) {
+			this.unsubscribeSessions();
+			this.unsubscribeSessions = null;
+		}
+
 		if (this.badgeEl) {
 			this.badgeEl.remove();
 			this.badgeEl = null;
+		}
+
+		if (this.activityDotEl) {
+			this.activityDotEl.remove();
+			this.activityDotEl = null;
 		}
 
 		if (this.resizeObserver) {
@@ -570,6 +592,41 @@ export class ClaudeSessionView extends ItemView {
 		(this.leaf as LeafWithTabHeader).updateHeader?.();
 		this.plugin.sessionManager.updateSessionHeader(this.sessionId, this.headerText);
 		this.updateTabBadge();
+		// updateHeader() may rebuild the tab header DOM; re-attach the dot.
+		this.activityDotCls = '';
+		this.updateTabActivityDot();
+	}
+
+	/**
+	 * Render the agent-activity dot on this tab's header (same semantics and
+	 * colors as the sidebar dots): pulsing yellow while working, pulsing red
+	 * while blocked, no dot for idle/unknown/exited so tabs stay clean.
+	 */
+	private updateTabActivityDot(): void {
+		const activity = this.plugin.sessionManager.getSession(this.sessionId)?.agentActivity;
+		const cls = activity === 'working'
+			? 'status-working'
+			: activity === 'blocked' ? 'status-blocked' : '';
+
+		if (cls === this.activityDotCls && (!cls || this.activityDotEl?.isConnected)) return;
+		this.activityDotCls = cls;
+
+		if (this.activityDotEl) {
+			this.activityDotEl.remove();
+			this.activityDotEl = null;
+		}
+		if (!cls) return;
+
+		const tabHeaderEl = (this.leaf as LeafWithTabHeader).tabHeaderEl;
+		if (!tabHeaderEl) return;
+
+		this.activityDotEl = createSpan({ cls: `claude-tab-activity-dot ${cls}` });
+		const innerTitle = tabHeaderEl.querySelector('.workspace-tab-header-inner-title');
+		if (innerTitle?.parentElement) {
+			innerTitle.parentElement.insertBefore(this.activityDotEl, innerTitle);
+		} else {
+			tabHeaderEl.appendChild(this.activityDotEl);
+		}
 	}
 
 	private updateTabBadge(): void {
