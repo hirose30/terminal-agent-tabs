@@ -112,6 +112,12 @@ export interface HookEventTypeFlags {
  * Assemble the Claude Code `--settings` hooks payload from the enabled event-type
  * flags, omitting any type the user has turned off. Returns null when every type
  * is disabled (nothing to inject).
+ *
+ * Exception: with notifications enabled, a PreToolUse entry scoped to the
+ * AskUserQuestion tool is always injected even while full PreToolUse logging
+ * is off. The question picker fires no Notification hook, so that PreToolUse
+ * line is the only signal that drives the blocked dot — and the tool-name
+ * matcher keeps every other (high-frequency) tool out of the log.
  */
 export function buildHookSettingsPayload(
 	flags: HookEventTypeFlags,
@@ -134,6 +140,13 @@ export function buildHookSettingsPayload(
 	if (flags.preToolUse) {
 		hooks.PreToolUse = [{
 			matcher: '',
+			hooks: [{ type: 'command', command: commandFor('pre-tool-use'), timeout: 5 }]
+		}];
+	} else if (flags.notification) {
+		// The '' matcher above already covers AskUserQuestion, so this
+		// tool-scoped entry only exists when full PreToolUse logging is off.
+		hooks.PreToolUse = [{
+			matcher: 'AskUserQuestion',
 			hooks: [{ type: 'command', command: commandFor('pre-tool-use'), timeout: 5 }]
 		}];
 	}

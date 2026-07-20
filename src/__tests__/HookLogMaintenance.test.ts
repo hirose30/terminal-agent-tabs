@@ -82,13 +82,13 @@ describe('alignToLineBoundary()', () => {
 describe('buildHookSettingsPayload()', () => {
 	const commandFor = (hookType: string) => `run ${hookType}`;
 
-	it('includes only enabled event types', () => {
+	it('includes only enabled event types (plus the AskUserQuestion PreToolUse rider)', () => {
 		const payload = buildHookSettingsPayload(
 			{ notification: true, stop: true, preToolUse: false },
 			commandFor
 		);
 		expect(payload).not.toBeNull();
-		expect(Object.keys(payload!.hooks).sort()).toEqual(['Notification', 'Stop']);
+		expect(Object.keys(payload!.hooks).sort()).toEqual(['Notification', 'PreToolUse', 'Stop']);
 	});
 
 	it('includes PreToolUse when explicitly enabled', () => {
@@ -97,6 +97,35 @@ describe('buildHookSettingsPayload()', () => {
 			commandFor
 		);
 		expect(Object.keys(payload!.hooks)).toEqual(['PreToolUse']);
+	});
+
+	it('injects an AskUserQuestion-scoped PreToolUse entry when only notification is enabled', () => {
+		const payload = buildHookSettingsPayload(
+			{ notification: true, stop: false, preToolUse: false },
+			commandFor
+		);
+		const preToolUse = (payload!.hooks as Record<string, Array<{ matcher: string; hooks: Array<{ command: string }> }>>).PreToolUse;
+		expect(preToolUse).toHaveLength(1);
+		expect(preToolUse[0].matcher).toBe('AskUserQuestion');
+		expect(preToolUse[0].hooks[0].command).toBe('run pre-tool-use');
+	});
+
+	it('uses only the catch-all matcher when preToolUse logging is also enabled (no double injection)', () => {
+		const payload = buildHookSettingsPayload(
+			{ notification: true, stop: false, preToolUse: true },
+			commandFor
+		);
+		const preToolUse = (payload!.hooks as Record<string, Array<{ matcher: string }>>).PreToolUse;
+		expect(preToolUse).toHaveLength(1);
+		expect(preToolUse[0].matcher).toBe('');
+	});
+
+	it('omits PreToolUse entirely when both notification and preToolUse are disabled', () => {
+		const payload = buildHookSettingsPayload(
+			{ notification: false, stop: true, preToolUse: false },
+			commandFor
+		);
+		expect(Object.keys(payload!.hooks)).toEqual(['Stop']);
 	});
 
 	it('returns null when every event type is disabled', () => {
