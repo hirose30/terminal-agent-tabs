@@ -2,6 +2,38 @@
 
 All notable changes to Terminal Agent Tabs are documented here.
 
+## 1.2.0 - 2026-07-22
+
+### Added
+
+- **Agent activity at a glance.** Each session now shows what the agent is
+  doing right now: a pulsing red dot when it is waiting for your response
+  (a permission prompt or a question), a pulsing yellow dot while it is
+  working, and green when idle. The dot appears in the sidebar and on the
+  tab header, and the macOS dock badge now counts sessions waiting for
+  your input instead of unread notifications.
+- **Session list density.** A new "Session list density" setting switches
+  the sidebar between a one-line compact view (default) and a normal view
+  with a one-line subtitle. Full details for every session are always
+  available in the hover tooltip (status, CLI, folder, age, last output,
+  latest notification).
+
+### Changed
+
+- Session tab titles no longer include the agent's spinner/status glyph
+  prefix — the state is shown by the activity dot instead.
+- The sidebar subtitle now prefers the latest notification body over the
+  CLI status-bar line, so it shows something meaningful while an agent is
+  waiting.
+- Numeric unread-count badges (tab header, dock) were replaced by the
+  activity indicators above.
+
+### Removed
+
+- The Notifications section in the sidebar. Unread state still drives the
+  per-session icons (needs-input triangle / complete check) and is cleared
+  when you open the session.
+
 ## 1.1.1 - 2026-07-14
 
 ### Fixed
