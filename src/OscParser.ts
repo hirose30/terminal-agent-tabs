@@ -10,6 +10,37 @@
  * - OSC 7: Report current working directory: \x1b]7;file://host/path\x07 (Phase 3 live cwd)
  */
 
+import type { AgentActivityState } from './types';
+
+export interface TitleActivity {
+	/** Activity encoded in the title prefix, or null when no prefix was recognized. */
+	state: Exclude<AgentActivityState, 'unknown'> | null;
+	/** Title with the activity prefix and following whitespace removed. */
+	cleanTitle: string;
+}
+
+/**
+ * Extract the agent activity encoded in an OSC window title.
+ *
+ * Claude Code prefixes its titles with a spinner glyph while a turn is in
+ * progress and with U+2733 when waiting (idle or showing a prompt):
+ * - Braille pattern (U+2800..U+28FF) + whitespace -> working
+ * - U+2733 (optionally with U+FE0F) + whitespace -> idle
+ * - anything else -> state null, title returned as-is (other CLIs set plain
+ *   titles; those must not flip the state)
+ */
+export function parseTitleActivity(title: string): TitleActivity {
+	const working = title.match(/^[\u2800-\u28FF]\s+(.*)$/);
+	if (working) {
+		return { state: 'working', cleanTitle: working[1] };
+	}
+	const idle = title.match(/^\u2733\uFE0F?\s+(.*)$/);
+	if (idle) {
+		return { state: 'idle', cleanTitle: idle[1] };
+	}
+	return { state: null, cleanTitle: title };
+}
+
 export interface OscParseResult {
 	/** Extracted title (if any) */
 	title: string | null;

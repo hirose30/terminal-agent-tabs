@@ -6,6 +6,16 @@ import type { FitAddon } from '@xterm/addon-fit';
 
 export type SessionStatus = 'running' | 'exited' | 'error';
 
+/**
+ * What the agent inside the terminal is doing, as reported via its OSC title
+ * prefix and hook events. Orthogonal to SessionStatus (process liveness): a
+ * session can be 'running' while the agent is idle. 'blocked' means the agent
+ * is waiting for the user's answer (permission prompt etc., via the
+ * Notification hook). 'unknown' means no recognizable signal was ever seen
+ * (e.g. plain shells), keeping legacy behavior.
+ */
+export type AgentActivityState = 'working' | 'blocked' | 'idle' | 'unknown';
+
 export type StartMode = 'new' | 'continue';
 
 /**
@@ -49,6 +59,8 @@ export interface Session {
 	fontSize: number;
 	headerText: string;
 	status: SessionStatus;
+	agentActivity: AgentActivityState;
+	agentActivityChangedAt: Date | null;
 	exitCode: number | null;
 	createdAt: Date;
 	cliId: string;
@@ -57,6 +69,12 @@ export interface Session {
 	launchCwd: string;
 	/** Tier1 (Codex) captured session id for this live session; persisted for `codex resume <id>`. */
 	codexSessionId?: string;
+	/**
+	 * Tier1 (Claude) per-tab resume key. Under the assign-id strategy it is
+	 * passed as --session-id, so hook payloads report it back as session_id —
+	 * which lets hook events be linked to this session deterministically.
+	 */
+	resumeKey?: string;
 	tabLaunchConfig?: TabLaunchConfig;
 	lastOutputLine?: string;
 	debugLogPath?: string;

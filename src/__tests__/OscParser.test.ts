@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { OscParser } from '../OscParser';
+import { OscParser, parseTitleActivity } from '../OscParser';
 
 describe('OscParser', () => {
 	let parser: OscParser;
@@ -97,6 +97,79 @@ describe('OscParser', () => {
 			parser.parse('\x1b]7;file://host/Users/me\x07');
 			parser.reset();
 			expect(parser.getCurrentCwd()).toBeNull();
+		});
+	});
+
+	describe('parseTitleActivity()', () => {
+		it('detects working from a braille spinner prefix (U+2802)', () => {
+			expect(parseTitleActivity('⠂ Count numbers one to twelve')).toEqual({
+				state: 'working',
+				cleanTitle: 'Count numbers one to twelve'
+			});
+		});
+
+		it('detects working at the low braille boundary (U+2800)', () => {
+			expect(parseTitleActivity('⠀ Title')).toEqual({
+				state: 'working',
+				cleanTitle: 'Title'
+			});
+		});
+
+		it('detects working at the high braille boundary (U+28FF)', () => {
+			expect(parseTitleActivity('⣿ Title')).toEqual({
+				state: 'working',
+				cleanTitle: 'Title'
+			});
+		});
+
+		it('does not detect working just outside the braille block (U+2900)', () => {
+			expect(parseTitleActivity('⤀ Title')).toEqual({
+				state: null,
+				cleanTitle: '⤀ Title'
+			});
+		});
+
+		it('detects idle from a U+2733 prefix', () => {
+			expect(parseTitleActivity('✳ Claude Code')).toEqual({
+				state: 'idle',
+				cleanTitle: 'Claude Code'
+			});
+		});
+
+		it('detects idle when U+2733 carries an emoji variation selector', () => {
+			expect(parseTitleActivity('✳️ Claude Code')).toEqual({
+				state: 'idle',
+				cleanTitle: 'Claude Code'
+			});
+		});
+
+		it('returns null state and the title unchanged when there is no prefix', () => {
+			expect(parseTitleActivity('Plain shell title')).toEqual({
+				state: null,
+				cleanTitle: 'Plain shell title'
+			});
+		});
+
+		it('returns null state for an empty title', () => {
+			expect(parseTitleActivity('')).toEqual({ state: null, cleanTitle: '' });
+		});
+
+		it('does not treat a braille char without following whitespace as a prefix', () => {
+			expect(parseTitleActivity('⠂Title')).toEqual({
+				state: null,
+				cleanTitle: '⠂Title'
+			});
+		});
+
+		it('does not treat U+2733 without following whitespace as a prefix', () => {
+			expect(parseTitleActivity('✳Title')).toEqual({
+				state: null,
+				cleanTitle: '✳Title'
+			});
+		});
+
+		it('does not treat a bare prefix char with no trailing text as a match', () => {
+			expect(parseTitleActivity('✳')).toEqual({ state: null, cleanTitle: '✳' });
 		});
 	});
 

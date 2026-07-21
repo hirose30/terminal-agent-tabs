@@ -7,7 +7,7 @@ import {
 } from './SessionManager';
 import { NotificationStore } from './NotificationStore';
 import { OutputMonitor } from './OutputMonitor';
-import { HookEventMonitor } from './HookEventMonitor';
+import { HookEventMonitor, resolveHookSessionId } from './HookEventMonitor';
 import { DockBadge } from './DockBadge';
 import { ensureEmbeddedResources } from './EmbeddedResources';
 import { SessionSidebarView, VIEW_TYPE_SESSION_SIDEBAR } from './SessionSidebarView';
@@ -20,6 +20,7 @@ import {
 	type SessionListDensity,
 	type TabLaunchConfig,
 } from './types';
+import { hookActivityEvent, preToolUseActivityEvent } from './AgentActivity';
 import { migrateCliProfiles, type LegacySettingsShape } from './SettingsMigration';
 import { trimLogFileIfOversized } from './HookLogMaintenance';
 
@@ -66,9 +67,11 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 		this.outputMonitor = new OutputMonitor();
 		this.dockBadge = new DockBadge();
 
-		// Sync dock badge with unread notification count
-		this.notificationStore.onChange(() => {
-			this.dockBadge.update(this.notificationStore.getTotalCount());
+		// Dock badge counts sessions currently blocked on the user — an
+		// actionable number, unlike an unread-notification total. Activity
+		// transitions fire sessionManager's notifyChange, so this stays live.
+		this.sessionManager.onChange(() => {
+			this.dockBadge.update(this.sessionManager.getBlockedSessionCount());
 		});
 		this.hookEventMonitor = new HookEventMonitor({
 			pollIntervalMs: this.settings.hookEventsPollIntervalMs,
@@ -358,13 +361,38 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 	}
 
 	private handleHookEvent(event: import('./HookEventMonitor').HookEvent): void {
+		// AskUserQuestion shows its picker without firing any Notification
+		// hook, so its PreToolUse line is the only "waiting on the user"
+		// signal. Flip the activity dot only — like every agent_event it
+		// stays silent (no notification, no sound).
+		const preToolUseEvent = preToolUseActivityEvent(event.toolName);
+		if (preToolUseEvent) {
+			const target = this.resolveHookTargetSessionId(event);
+			if (target) {
+				this.sessionManager.updateSessionActivity(target, preToolUseEvent);
+			}
+		}
+
 		// Skip agent_event notifications (e.g. pre-tool-use) as they are
 		// high-frequency informational events that don't require user attention.
 		if (event.notificationType === 'agent_event') {
 			return;
 		}
 
-		const targetSessionId = this.sessionManager.resolveNotificationSessionId();
+		const targetSessionId = this.resolveHookTargetSessionId(event);
+
+		// Drive the agent activity state from the hook stream. The heuristic
+		// fallback can still mis-attribute the event when several sessions
+		// run at once; that is self-repairing: if 'blocked' lands on a
+		// session that is actually mid-turn, its next braille spinner title
+		// flips it straight back to 'working'.
+		if (targetSessionId) {
+			const activityEvent = hookActivityEvent(event.notificationType, event.rawNotificationType);
+			if (activityEvent) {
+				this.sessionManager.updateSessionActivity(targetSessionId, activityEvent);
+			}
+		}
+
 		this.notificationStore.addNotification(
 			targetSessionId,
 			event.notificationType,
@@ -378,6 +406,16 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 			new Notice(`[${event.notificationTitle}] ${event.message}`, noticeTimeout);
 		}
 		this.playHookNotificationSound(event.soundKind);
+	}
+
+	/** See resolveHookSessionId() for the resolution order and rationale. */
+	private resolveHookTargetSessionId(event: import('./HookEventMonitor').HookEvent): string {
+		return resolveHookSessionId(event, {
+			hasSession: (sessionId) => !!this.sessionManager.getSession(sessionId),
+			findByAgentSessionId: (agentSessionId) =>
+				this.sessionManager.findSessionIdByAgentSessionId(agentSessionId),
+			fallback: () => this.sessionManager.resolveNotificationSessionId()
+		});
 	}
 
 	private playHookNotificationSound(kind: 'action' | 'complete' | 'event'): void {

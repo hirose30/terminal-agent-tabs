@@ -9,6 +9,8 @@ import type ClaudeCodeTabsPlugin from './main';
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 import { CodexSessionCapture } from './CodexSessionCapture';
+import { countBlockedSessions, nextAgentActivity } from './AgentActivity';
+import type { AgentActivityEvent } from './AgentActivity';
 import type {
 	Session,
 	StartMode,
@@ -402,12 +404,12 @@ export class SessionManager {
 		}
 	}
 
-	private buildLaunchCommand(profile: CliProfile, startMode: StartMode, additionalArgs: string[], resumeKey?: string, codexSessionId?: string) {
+	private buildLaunchCommand(profile: CliProfile, tatSessionId: string, startMode: StartMode, additionalArgs: string[], resumeKey?: string, codexSessionId?: string) {
 		const strategy = this.resolveResumeStrategy(profile);
 		const legacyCanResume = profile.supportsResume && profile.resumeArgs.length > 0;
 		const canResume = strategy === 'assign-id' || strategy === 'continue-latest' || legacyCanResume;
 
-		const hookArgs = this.buildHookArgs(profile);
+		const hookArgs = this.buildHookArgs(profile, tatSessionId);
 		const base = [...hookArgs, ...profile.defaultArgs];
 
 		let coreArgs: string[];
@@ -469,8 +471,13 @@ export class SessionManager {
 	/**
 	 * Build --settings args to auto-inject hooks for Claude Code profiles.
 	 * This enables notifications without manual hook configuration.
+	 *
+	 * The relay command embeds the plugin-side session id (--tat-session) so
+	 * hook events link back to their tab deterministically. Claude's own
+	 * session_id is not reliable for this: resumed sessions (--resume) fork
+	 * to a fresh id that matches no resumeKey.
 	 */
-	private buildHookArgs(profile: CliProfile): string[] {
+	private buildHookArgs(profile: CliProfile, tatSessionId: string): string[] {
 		if (!this.supportsClaudeHooks(profile)) return [];
 
 		const eventsFilePath = this.plugin.getEffectiveHookEventsFilePath();
@@ -483,7 +490,7 @@ export class SessionManager {
 		}
 
 		const makeCmd = (hookType: string) =>
-			`python3 "${relayPath}" ${hookType} "${eventsFilePath}"`;
+			`python3 "${relayPath}" ${hookType} "${eventsFilePath}" --tat-session "${tatSessionId}"`;
 
 		const { hookLogNotificationEnabled, hookLogStopEnabled, hookLogPreToolUseEnabled } = this.plugin.settings;
 		const payload = buildHookSettingsPayload(
@@ -539,6 +546,7 @@ export class SessionManager {
 			: new Set<string>();
 		const launchCommand = this.buildLaunchCommand(
 			profile,
+			sessionId,
 			startMode,
 			resolvedLaunchConfig.additionalArgs,
 			resumeKey,
@@ -577,11 +585,14 @@ export class SessionManager {
 				fontSize: this.plugin.settings.defaultFontSize,
 				headerText: defaultHeader,
 				status: 'error',
+				agentActivity: 'unknown',
+				agentActivityChangedAt: null,
 				exitCode: null,
 				createdAt: new Date(),
 				cliId: profile.id,
 				supportsResume: launchCommand.supportsResume,
 				launchCwd,
+				resumeKey,
 				tabLaunchConfig: resolvedLaunchConfig
 			};
 			this.sessions.set(sessionId, session);
@@ -597,6 +608,8 @@ export class SessionManager {
 			fontSize: this.plugin.settings.defaultFontSize,
 			headerText: defaultHeader,
 			status: 'running',
+			agentActivity: 'unknown',
+			agentActivityChangedAt: null,
 			exitCode: null,
 			createdAt: new Date(),
 			cliId: profile.id,
@@ -604,6 +617,7 @@ export class SessionManager {
 			launchCwd,
 			// Seed with the restored id (if any); the post-launch capture below refreshes it.
 			codexSessionId,
+			resumeKey,
 			tabLaunchConfig: resolvedLaunchConfig,
 			debugLogPath: debugTarget?.logPath,
 			debugStream: debugTarget?.stream ?? null
@@ -657,6 +671,7 @@ export class SessionManager {
 
 		childProcess.on('exit', (code: number | null) => {
 			session.status = 'exited';
+			session.agentActivity = 'unknown';
 			session.exitCode = code ?? 0;
 			if (session.debugStream) {
 				try {
@@ -673,6 +688,7 @@ export class SessionManager {
 
 		childProcess.on('error', (error: Error) => {
 			session.status = 'error';
+			session.agentActivity = 'unknown';
 			session.exitCode = 1;
 			if (session.debugStream) {
 				try {
@@ -692,6 +708,9 @@ export class SessionManager {
 			childProcess.stdin.on('close', () => {
 				if (session.status === 'running') {
 					session.status = 'exited';
+					// This path keeps the session in the map (no dropSession),
+					// so a stale working/blocked would otherwise survive exit.
+					session.agentActivity = 'unknown';
 					onExit(0);
 				}
 			});
@@ -776,6 +795,28 @@ export class SessionManager {
 		return isRunning ? session : undefined;
 	}
 
+	/** Number of running sessions currently blocked on the user (dock badge). */
+	getBlockedSessionCount(): number {
+		return countBlockedSessions(this.sessions.values());
+	}
+
+	/**
+	 * Resolve the plugin-side session id for an agent-reported session id
+	 * (Claude Code's session_id from a hook payload). Deterministic because
+	 * assign-id launches pass the tab's resumeKey as --session-id. Returns
+	 * null when no live session matches (e.g. a --resume launch forked to a
+	 * new agent session id, or the hook came from a session TAT doesn't own).
+	 */
+	findSessionIdByAgentSessionId(agentSessionId: string): string | null {
+		if (!agentSessionId) return null;
+		for (const session of this.sessions.values()) {
+			if (session.resumeKey === agentSessionId) {
+				return session.sessionId;
+			}
+		}
+		return null;
+	}
+
 	/**
 	 * Resolve the best session ID to associate with a notification.
 	 * If only one running session exists, use it. Otherwise use the last active.
@@ -835,6 +876,23 @@ export class SessionManager {
 		if (session) {
 			session.terminal = terminal;
 			session.fitAddon = fitAddon;
+		}
+	}
+
+	/**
+	 * Apply an observed activity event (OSC title prefix or hook) through the
+	 * transition rules in AgentActivity.ts. No-ops when the state does not
+	 * change: while working, the spinner retitles at high frequency and must
+	 * not trigger a sidebar re-render per frame.
+	 */
+	updateSessionActivity(sessionId: string, event: AgentActivityEvent): void {
+		const session = this.sessions.get(sessionId);
+		if (!session) return;
+		const next = nextAgentActivity(session.agentActivity, event);
+		if (session.agentActivity !== next) {
+			session.agentActivity = next;
+			session.agentActivityChangedAt = new Date();
+			this.notifyChange();
 		}
 	}
 
