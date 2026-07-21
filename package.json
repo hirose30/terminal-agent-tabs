@@ -1,6 +1,6 @@
 {
 	"name": "terminal-agent-tabs",
-	"version": "1.1.1",
+	"version": "1.2.0",
 	"description": "Run multiple agent CLI sessions (Claude Code, Codex, Gemini, etc.) as editor tabs.",
 	"main": "main.js",
 	"scripts": {
