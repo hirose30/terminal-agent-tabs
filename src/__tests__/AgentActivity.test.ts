@@ -44,6 +44,26 @@ describe('nextAgentActivity', () => {
 		}
 	});
 
+	describe('screen-blocked wins from any state', () => {
+		for (const from of ALL_STATES) {
+			it(`${from} -> blocked`, () => {
+				expect(nextAgentActivity(from, 'screen-blocked')).toBe('blocked');
+			});
+		}
+	});
+
+	describe('screen-unblocked only clears a screen-detected blocked state', () => {
+		it('blocked -> unknown when the prompt leaves a hook-less CLI screen', () => {
+			expect(nextAgentActivity('blocked', 'screen-unblocked')).toBe('unknown');
+		});
+
+		it('does not overwrite a newer activity signal', () => {
+			expect(nextAgentActivity('working', 'screen-unblocked')).toBe('working');
+			expect(nextAgentActivity('idle', 'screen-unblocked')).toBe('idle');
+			expect(nextAgentActivity('unknown', 'screen-unblocked')).toBe('unknown');
+		});
+	});
+
 	describe('hook-stop always ends the turn', () => {
 		for (const from of ALL_STATES) {
 			it(`${from} -> idle`, () => {

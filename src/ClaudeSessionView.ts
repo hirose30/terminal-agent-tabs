@@ -99,6 +99,19 @@ export class ClaudeSessionView extends ItemView {
 		return 'terminal';
 	}
 
+	/** Snapshot the active bottom screen so TUI cursor movement cannot leave stale raw lines. */
+	private getVisibleTerminalText(): string {
+		if (!this.terminal) return '';
+		const buffer = this.terminal.buffer.active;
+		const start = buffer.baseY;
+		const end = Math.min(buffer.length, start + this.terminal.rows);
+		const lines: string[] = [];
+		for (let index = start; index < end; index++) {
+			lines.push(buffer.getLine(index)?.translateToString(true) ?? '');
+		}
+		return lines.join('\n');
+	}
+
 	// Obsidian serializes getState() into workspace.json and replays it through
 	// setState() after a restart. Phase 1 persists the launch cwd here (alongside
 	// the legacy initialLaunchConfig, kept for backward read-compat) so the tab can
@@ -882,7 +895,10 @@ export class ClaudeSessionView extends ItemView {
 						this.terminal.write(data);
 						this.scrollbackDirty = true;
 						// Feed output monitor for pattern detection and last-line tracking
-						this.plugin.outputMonitor.feed(this.sessionId, data);
+						this.plugin.outputMonitor.feed(this.sessionId, data, {
+							profile: this.plugin.sessionManager.getOutputDetectionProfile(this.sessionId),
+							getVisibleText: () => this.getVisibleTerminalText(),
+						});
 						const lastLine = this.plugin.outputMonitor.getLastLine(this.sessionId);
 						if (lastLine) {
 							this.plugin.sessionManager.updateSessionLastOutput(this.sessionId, lastLine);

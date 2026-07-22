@@ -20,6 +20,7 @@ import type {
 } from './types';
 import { isSafeResumeKey } from './PersistedSessionState';
 import { buildHookSettingsPayload } from './HookLogMaintenance';
+import type { OutputDetectionProfile } from './OutputMonitor';
 
 export const SPECIAL_CLI_ID_DEFAULT_SHELL = '__default_shell__';
 
@@ -294,6 +295,20 @@ export class SessionManager {
 	getCliDisplayName(cliId: string): string {
 		const profile = this.getCliProfiles().find((item) => item.id === cliId);
 		return profile?.displayName || cliId;
+	}
+
+	/** Select CLI-specific screen rules without exposing profile internals to the view. */
+	getOutputDetectionProfile(sessionId: string): OutputDetectionProfile {
+		const session = this.sessions.get(sessionId);
+		if (!session) return 'generic';
+		const profile = this.resolveCliProfile(session.cliId);
+		const executable = profile.executablePath.toLowerCase().replace(/\\/g, '/');
+		return profile.id === 'codex'
+			|| executable === 'codex'
+			|| executable.endsWith('/codex')
+			|| executable.endsWith('/codex.exe')
+			? 'codex'
+			: 'generic';
 	}
 
 	private resolveCliProfile(cliId: string): CliProfile {
