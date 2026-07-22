@@ -92,7 +92,12 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 
 		// Auto-generate notifications from terminal output patterns
 		this.outputMonitor.onEvent((sessionId, event) => {
-			if (event.kind === 'action_needed') {
+			if (event.kind === 'activity_update') {
+				this.sessionManager.updateSessionActivity(sessionId, 'screen-unblocked');
+			} else if (event.kind === 'action_needed') {
+				if (event.agentActivity === 'blocked') {
+					this.sessionManager.updateSessionActivity(sessionId, 'screen-blocked');
+				}
 				this.notificationStore.addNotification(
 					sessionId, 'action_needed', 'Action Needed', event.message, 'terminal'
 				);

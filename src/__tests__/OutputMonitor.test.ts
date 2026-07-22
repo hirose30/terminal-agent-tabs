@@ -113,6 +113,230 @@ describe('OutputMonitor', () => {
 		});
 	});
 
+	describe('Codex visible-screen blocked detection', () => {
+		const approvalScreen = (title: string) => [
+			`  ${title}`,
+			'',
+			'› 1. Yes, proceed (y)',
+			'  2. No, and tell Codex what to do differently (esc)',
+			'',
+			'  Press enter to confirm or esc to cancel',
+		].join('\n');
+
+		it.each([
+			'Would you like to run the following command?',
+			'Would you like to make the following edits?',
+			'Would you like to grant these permissions?',
+			'Do you want to approve network access to "api.github.com"?',
+			'github needs your approval.',
+		])('marks the Codex approval screen blocked: %s', (title) => {
+			const cb = vi.fn();
+			monitor.onEvent(cb);
+			monitor.feed(title, 'TUI redraw', {
+				profile: 'codex',
+				getVisibleText: () => approvalScreen(title),
+			});
+
+			vi.advanceTimersByTime(3000);
+
+			expect(cb).toHaveBeenCalledWith(title, expect.objectContaining<OutputEvent>({
+				kind: 'action_needed',
+				agentActivity: 'blocked',
+			}));
+		});
+
+		it('marks request_user_input blocked', () => {
+			const cb = vi.fn();
+			monitor.onEvent(cb);
+			monitor.feed('s1', 'TUI redraw', {
+				profile: 'codex',
+				getVisibleText: () => [
+					'  Question 1/1 (1 unanswered)',
+					'  Choose an option.',
+					'  › 1. Option 1  First choice.',
+					'  tab to add notes | enter to submit answer | esc to interrupt',
+				].join('\n'),
+			});
+
+			vi.advanceTimersByTime(3000);
+
+			expect(cb).toHaveBeenCalledWith('s1', expect.objectContaining<OutputEvent>({
+				kind: 'action_needed',
+				agentActivity: 'blocked',
+			}));
+		});
+
+		it('recognizes an approval title and footer wrapped by a narrow terminal', () => {
+			const cb = vi.fn();
+			monitor.onEvent(cb);
+			monitor.feed('s1', 'TUI redraw', {
+				profile: 'codex',
+				getVisibleText: () => [
+					'  Would you like to grant these',
+					'  permissions?',
+					'› 1. Yes, grant these permissions',
+					'  Press enter to confirm or esc to',
+					'  cancel',
+				].join('\n'),
+			});
+
+			vi.advanceTimersByTime(3000);
+
+			expect(cb).toHaveBeenCalledWith('s1', expect.objectContaining<OutputEvent>({
+				kind: 'action_needed',
+				agentActivity: 'blocked',
+			}));
+		});
+
+		it('marks MCP elicitation blocked', () => {
+			const cb = vi.fn();
+			monitor.onEvent(cb);
+			monitor.feed('s1', 'TUI redraw', {
+				profile: 'codex',
+				getVisibleText: () => [
+					'  Field 1/1',
+					'  Allow this request?',
+					'  › 1. Allow   Run the tool and continue.',
+					'  enter to submit | esc to cancel',
+				].join('\n'),
+			});
+
+			vi.advanceTimersByTime(3000);
+
+			expect(cb).toHaveBeenCalledWith('s1', expect.objectContaining<OutputEvent>({
+				kind: 'action_needed',
+				agentActivity: 'blocked',
+			}));
+		});
+
+		it('marks the plan implementation decision blocked', () => {
+			const cb = vi.fn();
+			monitor.onEvent(cb);
+			monitor.feed('s1', 'TUI redraw', {
+				profile: 'codex',
+				getVisibleText: () => [
+					'  Implement this plan?',
+					'› 1. Yes, implement this plan',
+					'  2. No, stay in Plan mode',
+					'  Press enter to confirm or esc to go back',
+				].join('\n'),
+			});
+
+			vi.advanceTimersByTime(3000);
+
+			expect(cb).toHaveBeenCalledWith('s1', expect.objectContaining<OutputEvent>({
+				kind: 'action_needed',
+				agentActivity: 'blocked',
+			}));
+		});
+
+		it('does not mark a partial approval-looking screen blocked', () => {
+			const cb = vi.fn();
+			monitor.onEvent(cb);
+			monitor.feed('s1', 'TUI redraw', {
+				profile: 'codex',
+				getVisibleText: () => [
+					'Would you like to run the following command?',
+					'This is transcript prose, not a selection modal.',
+				].join('\n'),
+			});
+
+			vi.advanceTimersByTime(3000);
+
+			expect(cb).not.toHaveBeenCalled();
+		});
+
+		it('skips user-opened menus before broad legacy patterns', () => {
+			const cb = vi.fn();
+			monitor.onEvent(cb);
+			monitor.feed('s1', 'TUI redraw', {
+				profile: 'codex',
+				getVisibleText: () => [
+					'  Select approval mode',
+					'› 1. Ask before commands',
+					'  enter to select | esc to close',
+				].join('\n'),
+			});
+
+			vi.advanceTimersByTime(3000);
+
+			expect(cb).not.toHaveBeenCalled();
+		});
+
+		it('uses the current viewport instead of stale raw TUI output', () => {
+			const cb = vi.fn();
+			monitor.onEvent(cb);
+			monitor.feed('s1', 'Do you want to approve this stale line?\n', {
+				profile: 'codex',
+				getVisibleText: () => '› Ready for the next prompt\n  ? for shortcuts',
+			});
+
+			vi.advanceTimersByTime(3000);
+
+			expect(cb).not.toHaveBeenCalled();
+		});
+
+		it('emits unblocked when the detected prompt leaves the screen', () => {
+			const cb = vi.fn();
+			let screen = approvalScreen('Would you like to run the following command?');
+			monitor.onEvent(cb);
+			monitor.feed('s1', 'approval redraw', {
+				profile: 'codex',
+				getVisibleText: () => screen,
+			});
+			vi.advanceTimersByTime(3000);
+
+			screen = '✔ You approved Codex to run this command\n› Ready for the next prompt';
+			monitor.feed('s1', 'ready redraw', {
+				profile: 'codex',
+				getVisibleText: () => screen,
+			});
+			vi.advanceTimersByTime(3000);
+
+			expect(cb).toHaveBeenLastCalledWith('s1', {
+				kind: 'activity_update',
+				agentActivity: 'unblocked',
+			});
+			expect(cb).toHaveBeenCalledTimes(2);
+		});
+
+		it('rechecks the rendered screen after a control-sequence-only redraw', () => {
+			const cb = vi.fn();
+			let screen = approvalScreen('Would you like to run the following command?');
+			monitor.onEvent(cb);
+			monitor.feed('s1', 'approval redraw', {
+				profile: 'codex',
+				getVisibleText: () => screen,
+			});
+			vi.advanceTimersByTime(3000);
+
+			screen = '› Ready for the next prompt';
+			monitor.feed('s1', '\x1b[2J', {
+				profile: 'codex',
+				getVisibleText: () => screen,
+			});
+			vi.advanceTimersByTime(3000);
+
+			expect(cb).toHaveBeenLastCalledWith('s1', {
+				kind: 'activity_update',
+				agentActivity: 'unblocked',
+			});
+		});
+
+		it('does not apply Codex activity rules to a generic profile', () => {
+			const cb = vi.fn();
+			monitor.onEvent(cb);
+			monitor.feed('s1', 'TUI redraw', {
+				profile: 'generic',
+				getVisibleText: () => approvalScreen('Would you like to run the following command?'),
+			});
+
+			vi.advanceTimersByTime(3000);
+
+			expect(cb).not.toHaveBeenCalled();
+		});
+	});
+
 	describe('onEvent()', () => {
 		it('returns unsubscribe function that stops callbacks', () => {
 			const cb = vi.fn();

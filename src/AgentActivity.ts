@@ -15,6 +15,10 @@ export type AgentActivityEvent =
 	| 'osc-idle'
 	/** Notification hook: the agent is waiting for the user's answer. */
 	| 'hook-blocked'
+	/** Strict visible-screen rule: a hook-less CLI is waiting for an answer. */
+	| 'screen-blocked'
+	/** A previously detected hook-less CLI prompt left the active screen. */
+	| 'screen-unblocked'
 	/** Stop hook: task_complete (turn ended). */
 	| 'hook-stop'
 	/** The user typed into the terminal (any real PTY input). */
@@ -29,8 +33,9 @@ export type AgentActivityEvent =
  * - 'osc-idle' must NOT demote 'blocked': while a permission prompt is on
  *   screen the title carries the same U+2733 prefix as plain idle (measured
  *   in issue #28), and title re-emissions (e.g. summary updates) would
- *   otherwise flip a genuinely blocked session back to idle. Only
- *   'osc-working', 'hook-stop' and 'user-input' can clear 'blocked'.
+ *   otherwise flip a genuinely blocked session back to idle. Definitive
+ *   hook/title/input events clear it immediately; hook-less screen detection
+ *   clears it to unknown once the prompt is no longer rendered.
  * - 'user-input' only clears 'blocked': a keystroke while blocked means the
  *   user is answering the prompt (including Esc-cancel, which produces no
  *   Stop hook and no title change, so nothing else would clear the state).
@@ -44,7 +49,10 @@ export function nextAgentActivity(
 		case 'osc-working':
 			return 'working';
 		case 'hook-blocked':
+		case 'screen-blocked':
 			return 'blocked';
+		case 'screen-unblocked':
+			return current === 'blocked' ? 'unknown' : current;
 		case 'hook-stop':
 			return 'idle';
 		case 'osc-idle':
@@ -64,8 +72,9 @@ export function nextAgentActivity(
  * which used to clear the red dot just for looking at the tab. Any
  * \x1b-prefixed sequence longer than the lone Esc (CSI: focus events,
  * arrow keys, ...) is therefore ignored, and so are plain printable keys:
- * typing a digit to answer a prompt is confirmed by the turn restarting,
- * which the following braille title (osc-working) picks up anyway.
+ * typing a shortcut to answer a prompt is confirmed by the turn restarting:
+ * Claude emits a braille title and hook-less CLIs lose the matched prompt from
+ * their rendered screen.
  */
 export function isBlockedClearingInput(data: string): boolean {
 	return data.includes('\r') || data === '\x1b';
