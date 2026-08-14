@@ -238,13 +238,17 @@ export default class ClaudeCodeTabsPlugin extends Plugin {
 			callback: () => { void this.splitSession('vertical'); }
 		});
 
-		// Track active session for Send Selection + mark notifications as read
+		// Track active session for Send Selection + mark notifications as read.
+		// Also focus the terminal itself: switching to a session tab (by clicking
+		// its header, cycling panes, etc.) should let the user type immediately
+		// rather than leaving focus wherever it was on the previously active leaf.
 		this.registerEvent(
 			this.app.workspace.on('active-leaf-change', (leaf) => {
 				if (leaf?.view instanceof ClaudeSessionView) {
 					const view = leaf.view;
 					this.sessionManager.setActiveSession(view.sessionId);
 					this.notificationStore.dismissAllForSession(view.sessionId);
+					view.focusTerminal();
 				}
 			})
 		);

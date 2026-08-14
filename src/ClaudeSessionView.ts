@@ -276,6 +276,20 @@ export class ClaudeSessionView extends ItemView {
 		}
 
 		this.terminal.open(this.terminalContainer);
+
+		// Pressing Escape in the terminal appears to blur it and hand focus
+		// elsewhere in Obsidian. xterm already stops the Escape keydown from
+		// bubbling on its own, but not the keyup — stop that here too, on the
+		// chance Obsidian's keymap reacts to it. Returning true keeps xterm's
+		// own handling intact so the CLI underneath still receives the Esc
+		// byte (its interrupt key).
+		this.terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				event.stopPropagation();
+			}
+			return true;
+		});
+
 		this.registerOsc52ClipboardSync();
 		this.loadWebglRenderer();
 		this.loadSerializeAddon();
