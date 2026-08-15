@@ -2,6 +2,20 @@
 
 All notable changes to Terminal Agent Tabs are documented here.
 
+## 1.2.1 - 2026-08-15
+
+### Fixed
+
+- **Switching tabs now focuses the terminal.** Clicking a session tab's
+  header (or cycling panes) used to leave keyboard focus wherever it was
+  on the previously active tab, so you had to click into the terminal
+  before typing. Tab switching now focuses the terminal the same way the
+  Focus next/previous session commands and sidebar clicks already did.
+- **Escape no longer blurs the terminal.** Pressing Escape inside a
+  session used to move focus away to elsewhere in Obsidian. Focus now
+  stays in the terminal, and the CLI underneath still receives Escape as
+  before (its interrupt/cancel key).
+
 ## 1.2.0 - 2026-07-22
 
 ### Added
